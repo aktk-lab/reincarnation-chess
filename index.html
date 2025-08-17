@@ -1,292 +1,316 @@
-import React, { useEffect, useMemo, useRef, useState } from "react"; import { Chess } from "chess.js"; import { Chessboard } from "react-chessboard";
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1, maximum-scale=1"
+  />
+  <title>転生チェス（Reincarnation Chess）MVP</title>
+  <style>
+    :root { --bg:#f6f6f6; --card:#fff; --ink:#111; --muted:#6b7280; }
+    html,body { margin:0; background:var(--bg); color:var(--ink); font-family: system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif; }
+    .wrap { max-width:1100px; margin:0 auto; padding:16px; }
+    .grid { display:grid; gap:16px; grid-template-columns: 1fr; }
+    @media(min-width: 960px){ .grid { grid-template-columns: 2fr 1fr; } }
+    .card { background:var(--card); border-radius:16px; box-shadow:0 6px 16px rgba(0,0,0,.06); padding:16px; }
+    .row { display:flex; align-items:center; justify-content:space-between; gap:8px; }
+    .btn { border:1px solid #e5e7eb; background:#fff; border-radius:999px; padding:6px 12px; cursor:pointer; }
+    .btn.primary { background:#111; color:#fff; }
+    .small { font-size:12px; color:var(--muted); }
+    .queue li { display:flex; align-items:center; gap:8px; font-size:14px; }
+    .dot { width:8px; height:8px; border-radius:999px; display:inline-block; }
+    .dot.w { background:#3b82f6; } .dot.b { background:#ef4444; }
+    .log { max-height:260px; overflow:auto; font-size:14px; }
+    .title { font-weight: 700; font-size: 22px; }
+    .controls { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+    .seg { display:flex; gap:4px; border:1px solid #e5e7eb; border-radius:999px; padding:3px; background:#fff; }
+    .seg button { padding:4px 10px; border:none; background:transparent; border-radius:999px; cursor:pointer; }
+    .seg button.active { background:#111; color:#fff; }
+    .status { font-size:14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="row" style="margin-bottom:10px">
+      <div class="title">転生チェス（Reincarnation Chess）MVP</div>
+      <div class="controls">
+        <button id="btn-reset" class="btn">新規ゲーム</button>
+      </div>
+    </div>
 
-// --- 型定義 ---------------------------------------------------------------
-
-type Color = "w" | "b";
-
-type PieceType = "p" | "n" | "b" | "r" | "q" | "k";
-
-interface QueueItem { color: Color; // 取られた側（= 次に蘇る側） original: PieceType; // 取られた駒の元種（kは来ない想定だが型として許容） id: string; // ログ用 }
-
-// --- 定数 -----------------------------------------------------------------
-
-const PIECE_VALUES: Record<Exclude<PieceType, "k">, number> = { p: 1, n: 3, b: 3, r: 5, q: 9, };
-
-const BACK_RANK: Record<Color, string[]> = { w: ["a1","b1","c1","d1","e1","f1","g1","h1"], b: ["a8","b8","c8","d8","e8","f8","g8","h8"], };
-
-const HUMAN_COLOR: Color = "w"; // 人間は白で固定（必要ならUIで切替可）
-
-// --- 乱数ユーティリティ ---------------------------------------------------
-
-function pickRandom<T>(arr: T[]): T | undefined { if (!arr.length) return undefined; const idx = Math.floor(Math.random() * arr.length); return arr[idx]; }
-
-function drawReincarnatedType(original: PieceType): Exclude<PieceType, "k"> { const candidates: Exclude<PieceType, "k">[] = ["p", "n", "b", "r", "q"]; // キング除外 const filtered = candidates.filter((t) => t !== original); return pickRandom(filtered) || "n"; // 事故防止 }
-
-// 期待値（相手に蘇生を与えるデメリット） function expectedReincarnationValue(original: PieceType): number { const candidates: Exclude<PieceType, "k">[] = ["p", "n", "b", "r", "q"].filter( (t) => t !== original ) as Exclude<PieceType, "k">[]; const sum = candidates.reduce((acc, t) => acc + PIECE_VALUES[t], 0); return sum / candidates.length; }
-
-// --- コンポーネント -------------------------------------------------------
-
-export default function ReincarnationChessApp() { const [game, setGame] = useState(() => new Chess()); const [fen, setFen] = useState(game.fen()); const [queue, setQueue] = useState<QueueItem[]>([]); const [log, setLog] = useState<string[]>([]); const [aiThinking, setAiThinking] = useState(false); const [autoPromoteTo, setAutoPromoteTo] = useState<"q" | "r" | "b" | "n">("q"); const [showHints, setShowHints] = useState(true);
-
-// FEN更新ヘルパ const syncFen = () => setFen(game.fen());
-
-// 捕獲処理を監視するための直近ムーブ記録 const lastMoveRef = useRef<string | null>(null);
-
-// 盤を初期化 const resetGame = () => { const g = new Chess(); setGame(g); setFen(g.fen()); setQueue([]); setLog(["新規ゲーム開始。白の手番。"]); setAiThinking(false); };
-
-// --- 転生フェーズ：手番開始時に実行 ----------------------------------- const performReincarnationIfAny = (turn: Color) => { // キューから同色を1つだけ取り出す const idx = queue.findIndex((q) => q.color === turn); if (idx === -1) return false;
-
-const item = queue[idx];
-const newType = drawReincarnatedType(item.original);
-
-// 最奥列の空きマスを探す
-const emptyBack = BACK_RANK[turn].filter((sq) => game.get(sq) === null);
-if (!emptyBack.length) {
-  // 置けない → キューは維持
-  return false;
-}
-const chosen = pickRandom(emptyBack)!;
-
-// 直接盤に駒を置く（chess.js は put をサポート）
-// @ts-ignore - 型定義にないがランタイムには存在
-const ok: boolean = game.put({ type: newType, color: turn }, chosen);
-if (!ok) {
-  return false; // 念のため
-}
-
-// ログと状態更新
-const newQueue = [...queue];
-newQueue.splice(idx, 1);
-setQueue(newQueue);
-setLog((prev) => [
-  `【転生】${turn === "w" ? "白" : "黒"}の${pieceName(item.original)}が ${squareLabel(chosen)} に ${pieceName(newType)} として復活。`,
-  ...prev,
-]);
-syncFen();
-return true;
-
-};
-
-// ヒューマンの手番開始時にも転生を実行 useEffect(() => { const turn = game.turn() as Color; performReincarnationIfAny(turn); syncFen(); // eslint-disable-next-line react-hooks/exhaustive-deps }, [game]);
-
-// --- 手の適用 ----------------------------------------------------------- function safeGameMutate(mutator: (g: Chess) => void) { const g = new Chess(game.fen()); mutator(g); setGame(g); setFen(g.fen()); }
-
-// 捕獲があればキューに積む const enqueueIfCapture = (moveSan: string, colorJustMoved: Color) => { // SANに "x" があれば捕獲（厳密には不十分だが簡易判定） if (!moveSan.includes("x")) return; // 直前手の反対側が取られた側 const capturedColor: Color = colorJustMoved === "w" ? "b" : "w";
-
-// 何が取られたかを盤面差分から推定するのは難しいので、
-// chess.js の move 結果を使うため、lastMoveRef にLANを保持しておくのが簡単。
-
-};
-
-// 実際には chess.js の move 返却値を使って確実に取得する const applyMove = (from: string, to: string, promotion?: string) => { let moveResult: any = null; safeGameMutate((g) => { try { moveResult = g.move({ from, to, promotion }); } catch (e) { moveResult = null; } });
-
-if (!moveResult) return false;
-
-// 捕獲キュー
-if (moveResult.captured) {
-  const capturedType: PieceType = moveResult.captured;
-  const nextColor: Color = moveResult.color === "w" ? "b" : "w"; // 取られた側
-  const item: QueueItem = {
-    color: nextColor,
-    original: capturedType,
-    id: `${Date.now()}-${Math.random()}`,
-  };
-  setQueue((q) => [...q, item]);
-  setLog((prev) => [
-    `【捕獲】${moveResult.color === "w" ? "白" : "黒"} が ${squareLabel(moveResult.to)} で ${enemyColorLabel(nextColor)}の ${pieceName(capturedType)} を取った。`,
-    ...prev,
-  ]);
-}
-
-setLog((prev) => [
-  `【着手】${moveResult.color === "w" ? "白" : "黒"}: ${moveResult.san}`,
-  ...prev,
-]);
-
-setFen(game.fen());
-return true;
-
-};
-
-// --- ユーザー入力（ドラッグ＆ドロップ） -------------------------------- const onPieceDrop = (sourceSquare: string, targetSquare: string) => { if ((game.turn() as Color) !== HUMAN_COLOR) return false;
-
-const movingPiece = game.get(sourceSquare);
-if (!movingPiece) return false;
-
-const isPromotionMove =
-  movingPiece.type === "p" &&
-  ((HUMAN_COLOR === "w" && targetSquare.endsWith("8")) ||
-    (HUMAN_COLOR === "b" && targetSquare.endsWith("1")));
-
-const ok = applyMove(
-  sourceSquare,
-  targetSquare,
-  isPromotionMove ? autoPromoteTo : undefined
-);
-
-if (!ok) return false;
-
-// 相手（AI）の手番開始：AI側の転生→AI着手
-window.setTimeout(() => {
-  triggerAiTurn();
-}, 200);
-
-return true;
-
-};
-
-// --- AI --------------------------------------------------------------- // シンプル1手読み + 転生期待値ペナルティ function aiEvaluateMove(g: Chess, move: any): number { const clone = new Chess(g.fen()); const res = clone.move(move); if (!res) return -999;
-
-// 素材点差（簡易）
-const materialScore = material(clone, "b") - material(clone, "w");
-
-// この手で相手に捕獲を与えたなら、相手の転生EVをペナルティ
-let reincPenalty = 0;
-if (res.captured) {
-  reincPenalty = expectedReincarnationValue(res.captured as PieceType);
-}
-
-// チェックメイトボーナス/ピンチ
-if (clone.isCheckmate()) return 1000;
-if (clone.isStalemate()) return 0;
-
-return materialScore - reincPenalty * 0.8; // 重みは適当
-
-}
-
-function material(g: Chess, forColor: Color): number { const board = g.board(); let score = 0; for (const row of board) { for (const cell of row) { if (!cell) continue; if (cell.color !== forColor) continue; if (cell.type === "k") continue; // @ts-ignore score += PIECE_VALUES[cell.type]; } } return score; }
-
-const triggerAiTurn = () => { if (game.game_over()) return; if ((game.turn() as Color) !== opposite(HUMAN_COLOR)) return;
-
-setAiThinking(true);
-
-// まず転生
-performReincarnationIfAny(game.turn() as Color);
-syncFen();
-
-// 合法手一覧
-const moves = game.moves({ verbose: true });
-if (!moves.length) {
-  setAiThinking(false);
-  return;
-}
-
-// 1手読みスコアリング
-let best = moves[0];
-let bestScore = -Infinity;
-for (const m of moves) {
-  const s = aiEvaluateMove(game, m);
-  if (s > bestScore) {
-    bestScore = s;
-    best = m;
-  }
-}
-
-// 着手
-safeGameMutate((g) => {
-  g.move(best);
-});
-
-// 捕獲ならキュー
-if ((best as any).captured) {
-  const capturedType: PieceType = (best as any).captured;
-  const nextColor: Color = (best as any).color === "w" ? "b" : "w";
-  const item: QueueItem = {
-    color: nextColor,
-    original: capturedType,
-    id: `${Date.now()}-${Math.random()}`,
-  };
-  setQueue((q) => [...q, item]);
-  setLog((prev) => [
-    `【捕獲】AI(${(best as any).color === "w" ? "白" : "黒"}) が ${squareLabel((best as any).to)} で ${enemyColorLabel(nextColor)}の ${pieceName(capturedType)} を取った。`,
-    ...prev,
-  ]);
-}
-
-setLog((prev) => [
-  `【着手】AI: ${(best as any).san}`,
-  ...prev,
-]);
-
-setAiThinking(false);
-
-};
-
-// --- ユーティリティ ----------------------------------------------------- function pieceName(p: PieceType) { switch (p) { case "p": return "ポーン"; case "n": return "ナイト"; case "b": return "ビショップ"; case "r": return "ルーク"; case "q": return "クイーン"; case "k": return "キング"; default: return p; } } function squareLabel(sq: string) { return sq; } function enemyColorLabel(c: Color) { return c === "w" ? "白" : "黒"; } function opposite(c: Color): Color { return c === "w" ? "b" : "w"; }
-
-const statusText = useMemo(() => { if (game.isCheckmate()) return "チェックメイト！"; if (game.isStalemate()) return "ステイルメイト"; if (game.isDraw()) return "引き分け"; if (game.isCheck()) return ${game.turn() === "w" ? "白" : "黒"} がチェック中; return ${game.turn() === "w" ? "白" : "黒"} の手番; }, [fen]);
-
-// --- レイアウト --------------------------------------------------------- return ( <div className="min-h-screen w-full bg-neutral-100 text-neutral-900"> <div className="mx-auto max-w-6xl p-4 grid grid-cols-1 md:grid-cols-3 gap-4"> <div className="md:col-span-2"> <div className="flex items-center justify-between mb-2"> <h1 className="text-2xl font-bold">転生チェス（MVP）</h1> <div className="flex gap-2"> <button className="px-3 py-1 rounded-2xl shadow bg-white" onClick={resetGame}>新規ゲーム</button> <label className="px-3 py-1 rounded-2xl shadow bg-white flex items-center gap-2"> <input type="checkbox" checked={showHints} onChange={e=>setShowHints(e.target.checked)} /> ヒント </label> </div> </div>
-
-<div className="rounded-2xl shadow bg-white p-3">
-        <Chessboard
-          position={fen}
-          onPieceDrop={onPieceDrop}
-          boardWidth={Math.min(600, typeof window!=="undefined" ? window.innerWidth - 32 : 600)}
-          customBoardStyle={{ borderRadius: 16 }}
-          customDarkSquareStyle={{}}
-          customLightSquareStyle={{}}
-          arePremovesAllowed={false}
-          showBoardNotation={true}
-          customArrows={[]}
-          customSquareStyles={{}}
-        />
-        <div className="mt-3 flex items-center justify-between">
-          <div className="text-sm">{statusText}{aiThinking ? "（AI思考中…）" : ""}</div>
-          <div className="flex items-center gap-2 text-sm">
-            <span>昇格先:</span>
-            {(["q","r","b","n"] as const).map(t => (
-              <button
-                key={t}
-                onClick={()=>setAutoPromoteTo(t)}
-                className={`px-2 py-1 rounded-2xl border ${autoPromoteTo===t?"bg-neutral-900 text-white":"bg-white"}`}
-              >{pieceName(t as PieceType)}</button>
-            ))}
+    <div class="grid">
+      <div class="card">
+        <div id="board"></div>
+        <div class="row" style="margin-top:10px">
+          <div class="status" id="status">白の手番</div>
+          <div class="controls">
+            <div class="small">昇格先</div>
+            <div class="seg" id="promo-seg">
+              <button data-p="q" class="active">クイーン</button>
+              <button data-p="r">ルーク</button>
+              <button data-p="b">ビショップ</button>
+              <button data-p="n">ナイト</button>
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="rounded-2xl shadow bg-white p-3">
-          <h2 className="font-semibold mb-2">転生待ちキュー</h2>
-          <ul className="space-y-1 text-sm">
-            {queue.length===0 && <li className="text-neutral-500">（なし）</li>}
-            {queue.map((q,i)=> (
-              <li key={q.id} className="flex items-center gap-2">
-                <span className={`inline-block w-2 h-2 rounded-full ${q.color==="w"?"bg-blue-500":"bg-rose-500"}`}></span>
-                <span>{i+1}. {q.color==="w"?"白":"黒"}：{pieceName(q.original)} が次手番に転生</span>
-              </li>
-            ))}
-          </ul>
-          <p className="text-xs text-neutral-500 mt-2">※ キングには転生しません。配置は自陣最奥列の空きマスへ。元種と異なるランダムな別種に変化します。</p>
-        </div>
+      <div class="card">
+        <h3 style="margin:0 0 8px 0; font-size:16px">転生待ちキュー</h3>
+        <ul id="queue" class="queue" style="margin:0; padding-left:16px"></ul>
+        <p class="small">※ キングには転生しません。配置は自陣最奥列の空きマスへ。元種と異なるランダムな別種に変化します。</p>
 
-        <div className="rounded-2xl shadow bg-white p-3 max-h-64 overflow-auto">
-          <h2 className="font-semibold mb-2">ログ</h2>
-          <ol className="text-sm space-y-1">
-            {log.map((l,idx)=> <li key={idx}>{l}</li>)}
-          </ol>
-        </div>
+        <h3 style="margin:16px 0 8px 0; font-size:16px">ログ</h3>
+        <ol id="log" class="log" style="margin:0; padding-left:18px"></ol>
+
+        <h3 style="margin:16px 0 8px 0; font-size:16px">ルール（MVP）</h3>
+        <ul class="small" style="margin:0; padding-left:18px; line-height:1.5">
+          <li>通常チェス + 「手番開始時の転生」フェーズ。</li>
+          <li>自分が直前までに取られていれば、1体だけ自陣最奥列の空きへ蘇生。</li>
+          <li>蘇生する種はキング除外の5種から、元種と異なるランダム。</li>
+          <li>空きがなければスキップ（次回に持ち越し）。</li>
+        </ul>
       </div>
     </div>
-
-    <aside className="md:col-span-1">
-      <div className="rounded-2xl shadow bg-white p-4 sticky top-4">
-        <h2 className="font-semibold mb-2">ルール（MVP実装）</h2>
-        <ul className="list-disc pl-5 text-sm space-y-1">
-          <li>通常チェス + 転生フェーズ。</li>
-          <li>自分の手番開始時、直前までに自分が取られていれば、1体だけ自陣最奥列の空きへ蘇生。</li>
-          <li>蘇生する種はキングを除く5種から、元種と異なるランダム。</li>
-          <li>空きがなければスキップ（次回に持ち越し）。</li>
-          <li>プロモーションはUIで選択（既定はクイーン）。</li>
-        </ul>
-        <h3 className="font-semibold mt-4 mb-1">AI</h3>
-        <p className="text-sm">1手読み + 素材点 + 捕獲で相手に与える転生期待値のペナルティ考慮。</p>
-        <button className="mt-4 w-full px-3 py-2 rounded-2xl bg-neutral-900 text-white" onClick={resetGame}>リセット</button>
-      </div>
-    </aside>
   </div>
-</div>
 
-); }
+  <!-- アプリ本体 -->
+  <script type="module">
+    // ライブラリをCDNから読み込み（ESM）
+    import React, { useMemo, useRef, useState, useEffect } from "https://esm.sh/react@18.2.0";
+    import { createRoot } from "https://esm.sh/react-dom@18.2.0/client";
+    import { Chess } from "https://esm.sh/chess.js@1.0.0";
+    import { Chessboard } from "https://esm.sh/react-chessboard@4.4.4?deps=react@18.2.0,react-dom@18.2.0";
 
+    // --- 便利系 ------------------------------------------------------------
+    const HUMAN_COLOR = "w"; // 人間は白
+    const BACK_RANK = {
+      w: ["a1","b1","c1","d1","e1","f1","g1","h1"],
+      b: ["a8","b8","c8","d8","e8","f8","g8","h8"],
+    };
+    const PIECE_LABEL = { p:"ポーン", n:"ナイト", b:"ビショップ", r:"ルーク", q:"クイーン", k:"キング" };
+    const pieceName = (t) => PIECE_LABEL[t] ?? t;
+    const pick = (arr) => arr.length ? arr[Math.floor(Math.random()*arr.length)] : undefined;
+    const opposite = (c) => c === "w" ? "b" : "w";
+
+    const expectedReincarnationValue = (original) => {
+      const pool = ["p","n","b","r","q"].filter(t => t !== original);
+      const val = { p:1, n:3, b:3, r:5, q:9 };
+      return pool.reduce((a,t)=>a+val[t],0)/pool.length;
+    };
+
+    // --- React アプリ ------------------------------------------------------
+    function App(){
+      const [game, setGame] = useState(()=> new Chess());
+      const [fen, setFen] = useState(()=> new Chess().fen());
+      const [queue, setQueue] = useState([]); // {color, original, id}
+      const [log, setLog] = useState(["新規ゲーム開始。白の手番。"]);
+      const [aiThinking, setAiThinking] = useState(false);
+      const [promo, setPromo] = useState("q"); // q/r/b/n
+
+      // DOM要素
+      useEffect(()=>{
+        // 昇格UI
+        const seg = document.getElementById("promo-seg");
+        seg.querySelectorAll("button").forEach(btn=>{
+          btn.addEventListener("click", ()=>{
+            seg.querySelectorAll("button").forEach(b=>b.classList.remove("active"));
+            btn.classList.add("active");
+            setPromo(btn.dataset.p);
+          });
+        });
+        // リセット
+        document.getElementById("btn-reset").addEventListener("click", resetGame);
+      },[]);
+
+      // ステータス表示
+      useEffect(()=>{
+        const el = document.getElementById("status");
+        let text = (game.isCheckmate() && "チェックメイト！")
+          || (game.isStalemate() && "ステイルメイト")
+          || (game.isDraw() && "引き分け")
+          || ((game.turn()==="w"?"白":"黒") + " の手番");
+        if (game.isCheck() && !game.isCheckmate()) text += "（チェック中）";
+        if (aiThinking) text += "（AI思考中…）";
+        el.textContent = text;
+      },[fen, aiThinking]);
+
+      // キュー表示
+      useEffect(()=>{
+        const ul = document.getElementById("queue");
+        ul.innerHTML = "";
+        if (!queue.length) {
+          const li = document.createElement("li");
+          li.innerHTML = '<span class="small" style="color:var(--muted)">（なし）</span>';
+          ul.appendChild(li);
+          return;
+        }
+        queue.forEach((q, i)=>{
+          const li = document.createElement("li");
+          li.innerHTML = `<span class="dot ${q.color}"></span> ${i+1}. ${q.color==="w"?"白":"黒"}：${pieceName(q.original)} が次手番に転生`;
+          ul.appendChild(li);
+        });
+      },[queue]);
+
+      // ログ表示
+      useEffect(()=>{
+        const ol = document.getElementById("log");
+        ol.innerHTML = "";
+        log.forEach(item=>{
+          const li = document.createElement("li");
+          li.textContent = item;
+          ol.appendChild(li);
+        });
+      },[log]);
+
+      function resetGame(){
+        const g = new Chess();
+        setGame(g);
+        setFen(g.fen());
+        setQueue([]);
+        setLog(["新規ゲーム開始。白の手番。"]);
+        setAiThinking(false);
+      }
+
+      // 転生（手番開始時）
+      function performReincarnationIfAny(color){
+        const idx = queue.findIndex(q => q.color === color);
+        if (idx === -1) return false;
+
+        const emptyBack = BACK_RANK[color].filter(sq => !game.get(sq));
+        if (!emptyBack.length) return false;
+
+        const item = queue[idx];
+        const newType = pick(["p","n","b","r","q"].filter(t => t !== item.original)) || "n";
+        const chosen = pick(emptyBack);
+        // 直接配置（castling権などは変更しない）
+        game.put({ type:newType, color }, chosen);
+        setFen(game.fen());
+
+        const nextQ = queue.slice();
+        nextQ.splice(idx,1);
+        setQueue(nextQ);
+
+        setLog(prev => [`【転生】${color==="w"?"白":"黒"}の${pieceName(item.original)}が ${chosen} に ${pieceName(newType)} として復活。`, ...prev]);
+        return true;
+      }
+
+      // 着手適用（人間/AI共通）
+      function applyMove(from, to, promotion){
+        const res = game.move({ from, to, promotion });
+        if (!res) return false;
+
+        // 捕獲 → 待機キューへ
+        if (res.captured){
+          const capturedType = res.captured;   // 'p','n','b','r','q','k'
+          const capturedColor = res.color === "w" ? "b" : "w";
+          setQueue(q => [...q, { color: capturedColor, original: capturedType, id: `${Date.now()}-${Math.random()}` }]);
+          setLog(prev => [`【捕獲】${res.color==="w"?"白":"黒"} が ${res.to} で ${capturedColor==="w"?"白":"黒"}の ${pieceName(capturedType)} を取った。`, ...prev]);
+        }
+
+        setLog(prev => [`【着手】${res.color==="w"?"白":"黒"}: ${res.san}`, ...prev]);
+        setFen(game.fen());
+        return true;
+      }
+
+      // --- AI 手番 ----------------------------------------------------------
+      function aiMaterial(forColor){
+        let score=0;
+        for (const row of game.board()){
+          for (const cell of row){
+            if (!cell || cell.color !== forColor || cell.type === "k") continue;
+            score += ({p:1,n:3,b:3,r:5,q:9})[cell.type];
+          }
+        }
+        return score;
+      }
+      function aiEvaluateMove(move){
+        const clone = new Chess(game.fen());
+        const r = clone.move(move);
+        if (!r) return -999;
+        if (clone.isCheckmate()) return 1000;
+        if (clone.isStalemate()) return 0;
+
+        const mat = aiMaterial("b") - aiMaterial("w");
+        const penalty = r.captured ? expectedReincarnationValue(r.captured) : 0;
+        return mat - penalty*0.8;
+      }
+      function aiTurn(){
+        if (game.game_over()) return;
+        if (game.turn() !== "b") return;
+
+        setAiThinking(true);
+
+        // 手番開始：AI側の転生
+        performReincarnationIfAny("b");
+        setFen(game.fen());
+
+        const moves = game.moves({ verbose:true });
+        if (!moves.length){ setAiThinking(false); return; }
+
+        // 1手読みで選択
+        let best = moves[0], bestScore = -Infinity;
+        for (const m of moves){
+          const s = aiEvaluateMove(m);
+          if (s > bestScore){ bestScore = s; best = m; }
+        }
+
+        // 着手
+        applyMove(best.from, best.to, best.promotion);
+        setAiThinking(false);
+
+        // AIが指し終えたら、人間手番の開始＝転生を即時実行
+        if (game.turn() === "w"){
+          performReincarnationIfAny("w");
+          setFen(game.fen());
+        }
+      }
+
+      // --- 人間の入力（ドラッグ＆ドロップ） --------------------------------
+      function onPieceDrop(sourceSquare, targetSquare){
+        if (game.turn() !== HUMAN_COLOR) return false;
+
+        // 昇格判定
+        const moving = game.get(sourceSquare);
+        const isPromo = moving?.type === "p" &&
+          ((HUMAN_COLOR==="w" && /8$/.test(targetSquare)) || (HUMAN_COLOR==="b" && /1$/.test(targetSquare)));
+
+        const ok = applyMove(sourceSquare, targetSquare, isPromo ? promo : undefined);
+        if (!ok) return false;
+
+        // 人間が指し終えたらAI手番へ（AI側の転生→着手）
+        setTimeout(()=> aiTurn(), 180);
+        return true;
+      }
+
+      // 初手番（白）の開始時：キューがあれば即転生（通常は何もなし）
+      useEffect(()=>{
+        if (game.turn() === "w") {
+          performReincarnationIfAny("w");
+          setFen(game.fen());
+        }
+        // eslint-disable-next-line
+      },[]);
+
+      // React描画
+      return React.createElement(
+        React.Fragment,
+        null,
+        React.createElement(Chessboard, {
+          position: fen,
+          onPieceDrop,
+          boardWidth: Math.min(640, (typeof window!=="undefined" ? window.innerWidth : 640) - 48),
+          showBoardNotation: true,
+          arePremovesAllowed: false,
+          customBoardStyle: { borderRadius: "16px" }
+        })
+      );
+    }
+
+    // マウント
+    const root = createRoot(document.getElementById("board"));
+    root.render(React.createElement(App));
+  </script>
+</body>
+</html>
