@@ -19,6 +19,32 @@
             color: #4a4a4a;
             margin-bottom: 20px;
         }
+        #setup-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        #setup-container button {
+            padding: 10px 20px;
+            font-size: 1em;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            margin: 5px;
+            background-color: #007bff;
+            color: white;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+            transition: background-color 0.3s;
+        }
+        #setup-container button:hover {
+            background-color: #0056b3;
+        }
+        #game-container {
+            display: none; /* ゲーム開始まで非表示 */
+            flex-direction: column;
+            align-items: center;
+        }
         #board-container {
             position: relative;
             margin-bottom: 20px;
@@ -174,33 +200,42 @@
 </head>
 <body>
     <h1>転生チェス</h1>
-    <div id="message"></div>
-    <div id="current-turn">白のターン</div>
-    <div id="board-container">
-        <div id="board"></div>
-        <div class="resurrection-dialog" id="resurrectionDialog">
-            <p>駒を選んで転生させてください</p>
-            <div class="resurrection-options">
-                <span class="resurrection-option piece" data-piece-type="queen">♕</span>
-                <span class="resurrection-option piece" data-piece-type="rook">♖</span>
-                <span class="resurrection-option piece" data-piece-type="bishop">♗</span>
-                <span class="resurrection-option piece" data-piece-type="knight">♘</span>
+    <div id="setup-container">
+        <h2>手番を選択</h2>
+        <button id="select-white">白でプレイ</button>
+        <button id="select-black">黒でプレイ</button>
+    </div>
+    <div id="game-container">
+        <div id="message"></div>
+        <div id="current-turn"></div>
+        <div id="board-container">
+            <div id="board"></div>
+            <div class="resurrection-dialog" id="resurrectionDialog">
+                <p>駒を選んで転生させてください</p>
+                <div class="resurrection-options">
+                    <span class="resurrection-option piece" data-piece-type="queen">♕</span>
+                    <span class="resurrection-option piece" data-piece-type="rook">♖</span>
+                    <span class="resurrection-option piece" data-piece-type="bishop">♗</span>
+                    <span class="resurrection-option piece" data-piece-type="knight">♘</span>
+                </div>
             </div>
         </div>
-    </div>
-    <div id="captured-pieces-container">
-        <div class="captured-pieces white-captured">
-            <h3>白の捕獲済み</h3>
+        <div id="captured-pieces-container">
+            <div class="captured-pieces white-captured">
+                <h3>白の捕獲済み</h3>
+            </div>
+            <div class="captured-pieces black-captured">
+                <h3>黒の捕獲済み</h3>
+            </div>
         </div>
-        <div class="captured-pieces black-captured">
-            <h3>黒の捕獲済み</h3>
-        </div>
+        <button id="resurrect-button">転生する</button>
+        <div class="overlay" id="overlay"></div>
     </div>
-    <button id="resurrect-button">転生する</button>
-    <div class="overlay" id="overlay"></div>
 
     <script>
         document.addEventListener('DOMContentLoaded', () => {
+            const setupContainer = document.getElementById('setup-container');
+            const gameContainer = document.getElementById('game-container');
             const boardEl = document.getElementById('board');
             const messageEl = document.getElementById('message');
             const currentTurnEl = document.getElementById('current-turn');
@@ -209,6 +244,8 @@
             const resurrectButton = document.getElementById('resurrect-button');
             const resurrectionDialog = document.getElementById('resurrectionDialog');
             const overlay = document.getElementById('overlay');
+            const selectWhiteBtn = document.getElementById('select-white');
+            const selectBlackBtn = document.getElementById('select-black');
 
             const pieceMap = {
                 'king': { white: '♔', black: '♚' },
@@ -225,6 +262,7 @@
             const capturedPieces = { white: [], black: [] };
             let isResurrectionMode = false;
             let selectedCapturedPiece = null;
+            let playerColor = null;
 
             function createBoard() {
                 boardEl.innerHTML = '';
@@ -398,13 +436,17 @@
             }
 
             function isCheckmate(color) {
-                // TODO: 実際のチェスルールに従ったチェックメイト判定を実装
                 return false;
             }
 
             function switchTurn() {
                 currentTurn = currentTurn === 'white' ? 'black' : 'white';
                 currentTurnEl.textContent = `${currentTurn === 'white' ? '白' : '黒'}のターン`;
+
+                if (currentTurn !== playerColor && !isCheckmate(currentTurn)) {
+                    // コンピュータのターン
+                    setTimeout(makeComputerMove, 500); // 0.5秒の遅延
+                }
             }
 
             function handleMove(targetRow, targetCol) {
@@ -412,16 +454,14 @@
                 const fromCol = selectedPiece.col;
                 const pieceToMove = board[fromRow][fromCol];
 
-                // 駒の捕獲
                 const capturedPiece = board[targetRow][targetCol];
                 if (capturedPiece) {
                     capturedPieces[currentTurn].push(capturedPiece);
                     renderCapturedPieces();
                 }
 
-                // ポーンのプロモーション
                 if (pieceToMove.type === 'pawn' && ((currentTurn === 'white' && targetRow === 0) || (currentTurn === 'black' && targetRow === 7))) {
-                    pieceToMove.type = 'queen'; // 簡単にクイーンにプロモーション
+                    pieceToMove.type = 'queen';
                 }
 
                 board[targetRow][targetCol] = pieceToMove;
@@ -438,6 +478,7 @@
             }
             
             function enterResurrectionMode(event) {
+                if (currentTurn !== playerColor) return;
                 event.stopPropagation();
                 if (capturedPieces[currentTurn].length === 0) {
                     messageEl.textContent = "転生させる駒がありません。";
@@ -447,7 +488,6 @@
                 messageEl.textContent = "転生させたい駒を選択し、配置場所をクリックしてください。";
                 resurrectButton.style.display = 'none';
                 
-                // 捕獲された駒の選択を可能にする
                 const capturedPiecesContainer = document.querySelector(`.${currentTurn === 'white' ? 'white' : 'black'}-captured`);
                 capturedPiecesContainer.querySelectorAll('.captured-piece').forEach(el => {
                     el.style.cursor = 'pointer';
@@ -471,7 +511,6 @@
                 const capturedIndex = selectedCapturedPiece.dataset.index;
                 const pieceToResurrect = capturedPieces[currentTurn].splice(capturedIndex, 1)[0];
                 
-                // 転生後の駒タイプをユーザーに選ばせる
                 showResurrectionDialog(pieceToResurrect.color, targetRow, targetCol);
             }
 
@@ -506,6 +545,8 @@
             }
 
             function handleBoardClick(event) {
+                if (currentTurn !== playerColor) return;
+
                 if (isResurrectionMode) {
                     const targetSquare = event.target.closest('.square');
                     if (!targetSquare) return;
@@ -532,7 +573,6 @@
                 const col = parseInt(clickedSquare.dataset.col);
 
                 if (selectedPiece) {
-                    // 駒の移動
                     const legalMoves = getLegalMoves(board[selectedPiece.row][selectedPiece.col], selectedPiece.row, selectedPiece.col);
                     const isLegalMove = legalMoves.some(move => move.row === row && move.col === col);
                     if (isLegalMove) {
@@ -543,7 +583,6 @@
                         renderBoard();
                     }
                 } else {
-                    // 駒の選択
                     const piece = board[row][col];
                     if (piece && piece.color === currentTurn) {
                         selectedPiece = { row, col };
@@ -563,19 +602,64 @@
                     }
                 }
             }
-            
+
+            function getPossibleMoves(color) {
+                const possibleMoves = [];
+                for (let r = 0; r < 8; r++) {
+                    for (let c = 0; c < 8; c++) {
+                        const piece = board[r][c];
+                        if (piece && piece.color === color) {
+                            const legalMoves = getLegalMoves(piece, r, c);
+                            legalMoves.forEach(move => {
+                                possibleMoves.push({
+                                    from: { row: r, col: c },
+                                    to: move
+                                });
+                            });
+                        }
+                    }
+                }
+                return possibleMoves;
+            }
+
+            function makeComputerMove() {
+                const computerColor = playerColor === 'white' ? 'black' : 'white';
+                const allPossibleMoves = getPossibleMoves(computerColor);
+                
+                if (allPossibleMoves.length > 0) {
+                    const randomMove = allPossibleMoves[Math.floor(Math.random() * allPossibleMoves.length)];
+                    
+                    selectedPiece = { row: randomMove.from.row, col: randomMove.from.col };
+                    handleMove(randomMove.to.row, randomMove.to.col);
+                } else {
+                    // 詰みの場合
+                    messageEl.textContent = `${computerColor === 'white' ? '白' : '黒'}が詰みました！`;
+                }
+            }
+
+            selectWhiteBtn.addEventListener('click', () => startGame('white'));
+            selectBlackBtn.addEventListener('click', () => startGame('black'));
             resurrectButton.addEventListener('click', enterResurrectionMode);
             boardEl.addEventListener('click', handleBoardClick);
 
-            function init() {
+            function startGame(color) {
+                playerColor = color;
+                setupContainer.style.display = 'none';
+                gameContainer.style.display = 'flex';
+                currentTurn = 'white';
+
                 createBoard();
                 setupPieces();
                 renderBoard();
                 renderCapturedPieces();
                 messageEl.textContent = 'ゲーム開始！';
-            }
+                currentTurnEl.textContent = '白のターン';
 
-            init();
+                if (playerColor === 'black') {
+                    // 黒を選択した場合、コンピュータの最初のターンを実行
+                    setTimeout(makeComputerMove, 500);
+                }
+            }
         });
     </script>
 </body>
