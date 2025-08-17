@@ -152,6 +152,21 @@
         #resurrect-button:hover {
             background-color: #45a049;
         }
+        #reset-button {
+            padding: 10px 20px;
+            font-size: 1em;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #dc3545;
+            color: white;
+            margin-top: 10px;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+            transition: background-color 0.3s;
+        }
+        #reset-button:hover {
+            background-color: #c82333;
+        }
         .resurrection-dialog {
             position: absolute;
             top: 50%;
@@ -229,6 +244,7 @@
             </div>
         </div>
         <button id="resurrect-button">転生する</button>
+        <button id="reset-button">リセット</button>
         <div class="overlay" id="overlay"></div>
     </div>
 
@@ -242,6 +258,7 @@
             const whiteCapturedEl = document.querySelector('.white-captured');
             const blackCapturedEl = document.querySelector('.black-captured');
             const resurrectButton = document.getElementById('resurrect-button');
+            const resetButton = document.getElementById('reset-button');
             const resurrectionDialog = document.getElementById('resurrectionDialog');
             const overlay = document.getElementById('overlay');
             const selectWhiteBtn = document.getElementById('select-white');
@@ -444,8 +461,7 @@
                 currentTurnEl.textContent = `${currentTurn === 'white' ? '白' : '黒'}のターン`;
 
                 if (currentTurn !== playerColor && !isCheckmate(currentTurn)) {
-                    // コンピュータのターン
-                    setTimeout(makeComputerMove, 500); // 0.5秒の遅延
+                    setTimeout(makeComputerMove, 500);
                 }
             }
 
@@ -632,14 +648,32 @@
                     selectedPiece = { row: randomMove.from.row, col: randomMove.from.col };
                     handleMove(randomMove.to.row, randomMove.to.col);
                 } else {
-                    // 詰みの場合
                     messageEl.textContent = `${computerColor === 'white' ? '白' : '黒'}が詰みました！`;
                 }
+            }
+
+            function resetGame() {
+                selectedPiece = null;
+                currentTurn = 'white';
+                capturedPieces.white = [];
+                capturedPieces.black = [];
+                isResurrectionMode = false;
+                selectedCapturedPiece = null;
+                playerColor = null;
+
+                gameContainer.style.display = 'none';
+                setupContainer.style.display = 'flex';
+                messageEl.textContent = '';
+                currentTurnEl.textContent = '';
+                renderCapturedPieces();
+                boardEl.removeEventListener('click', handleBoardClick);
+                boardEl.addEventListener('click', handleBoardClick);
             }
 
             selectWhiteBtn.addEventListener('click', () => startGame('white'));
             selectBlackBtn.addEventListener('click', () => startGame('black'));
             resurrectButton.addEventListener('click', enterResurrectionMode);
+            resetButton.addEventListener('click', resetGame);
             boardEl.addEventListener('click', handleBoardClick);
 
             function startGame(color) {
@@ -656,7 +690,6 @@
                 currentTurnEl.textContent = '白のターン';
 
                 if (playerColor === 'black') {
-                    // 黒を選択した場合、コンピュータの最初のターンを実行
                     setTimeout(makeComputerMove, 500);
                 }
             }
