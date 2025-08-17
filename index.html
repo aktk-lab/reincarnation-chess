@@ -1,302 +1,279 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
-  <title>転生チェス（Reincarnation Chess）MVP</title>
-  <style>
-    :root { --bg:#eef6f2; --card:#fff; --ink:#0b1320; --muted:#60707f; --board-size: min(96vw, 640px); }
-    html,body { margin:0; background:var(--bg); color:var(--ink); font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-    .wrap { max-width:1150px; margin:0 auto; padding:16px; }
-    .row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
-    .title { font-size:28px; font-weight:800; letter-spacing:.2px; margin-right:auto; }
-    .select, .btn { border:1px solid #e5e7eb; background:#fff; border-radius:12px; padding:10px 12px; font-size:14px; }
-    .btn { cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,.06); }
-    .grid { display:grid; gap:16px; grid-template-columns: 1fr; }
-    @media (min-width: 980px){ .grid { grid-template-columns: 2fr 1fr; } }
-    .card { background:var(--card); border-radius:16px; box-shadow:0 10px 24px rgba(0,0,0,.08); padding:16px; }
-    h3 { margin:0 0 10px 0; font-size:18px; }
-    .small { font-size:12px; color:var(--muted); }
-    .stack { display:flex; flex-direction:column; gap:12px; }
-    .queue li { display:flex; align-items:center; gap:8px; font-size:14px; }
-    .dot { width:8px; height:8px; border-radius:999px; display:inline-block; }
-    .dot.w { background:#3b82f6; } .dot.b { background:#ef4444; }
-    .log { max-height:300px; overflow:auto; font-size:14px; border:1px dashed #e5e7eb; border-radius:12px; padding:10px; background:#fafafa; }
-    .toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
-    .seg { display:flex; gap:4px; border:1px solid #e5e7eb; border-radius:999px; padding:3px; background:#fff; }
-    .seg button { padding:4px 10px; border:none; background:transparent; border-radius:999px; cursor:pointer; font-size:13px; }
-    .seg button.active { background:#0b1320; color:#fff; }
-    /* 盤サイズはCSS変数で制御（内蔵SVGなのでこれだけでOK） */
-    chess-board { width: var(--board-size); max-width: 100%; margin: 0 auto; }
-    .status { font-size:14px; }
-    .section-title { font-weight:700; margin:8px 0 12px; }
-  </style>
-  <!-- 盤コンポーネント（内蔵SVG・画像不要） -->
-  <script type="module" src="https://unpkg.com/chessboard-element@2.4.0/dist/chessboard-element.js"></script>
-  <!-- ルールエンジン -->
-  <script src="https://cdn.jsdelivr.net/npm/chess.js@1.0.0/dist/chess.min.js"></script>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>転生チェス</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f0f0f0;
+            color: #333;
+            margin: 0;
+            padding: 20px;
+        }
+        h1 {
+            color: #4a4a4a;
+            margin-bottom: 20px;
+        }
+        #board-container {
+            position: relative;
+            margin-bottom: 20px;
+        }
+        #board {
+            display: grid;
+            grid-template-columns: repeat(8, 50px);
+            grid-template-rows: repeat(8, 50px);
+            border: 2px solid #333;
+            box-shadow: 5px 5px 15px rgba(0, 0, 0, 0.2);
+            background-color: #fff;
+        }
+        .square {
+            width: 50px;
+            height: 50px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 30px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .light {
+            background-color: #f0d9b5;
+        }
+        .dark {
+            background-color: #b58863;
+        }
+        .selected {
+            background-color: #6aab73 !important;
+        }
+        .legal-move {
+            background-color: #90ee90;
+            opacity: 0.8;
+        }
+        .piece {
+            user-select: none;
+            cursor: grab;
+            transition: transform 0.1s;
+        }
+        .piece.white {
+            color: #fff;
+            text-shadow: -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000, 1px 1px 0 #000;
+        }
+        .piece.black {
+            color: #000;
+        }
+        #message {
+            font-size: 1.2em;
+            font-weight: bold;
+            color: #4a4a4a;
+            margin-bottom: 10px;
+            text-align: center;
+        }
+        #current-turn {
+            font-size: 1.1em;
+            margin-bottom: 10px;
+        }
+        #captured-pieces-container {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            margin-top: 20px;
+            gap: 20px;
+        }
+        .captured-pieces {
+            display: flex;
+            flex-wrap: wrap;
+            border: 1px solid #ccc;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 8px;
+            min-height: 50px;
+            box-shadow: inset 0 0 5px rgba(0, 0, 0, 0.1);
+        }
+        .captured-pieces.white-captured {
+            background-color: #e0e0e0;
+        }
+        .captured-pieces.black-captured {
+            background-color: #c0c0c0;
+        }
+        .captured-piece {
+            font-size: 24px;
+            cursor: pointer;
+            margin: 2px;
+            padding: 2px;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+        .captured-piece:hover {
+            background-color: #ddd;
+        }
+        #resurrect-button {
+            padding: 10px 20px;
+            font-size: 1em;
+            cursor: pointer;
+            border: none;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            color: white;
+            margin-top: 10px;
+            box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.2);
+            transition: background-color 0.3s;
+        }
+        #resurrect-button:hover {
+            background-color: #45a049;
+        }
+        .resurrection-dialog {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #fff;
+            padding: 20px;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            display: none;
+            z-index: 100;
+        }
+        .resurrection-dialog-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .resurrection-options {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+        .resurrection-option {
+            font-size: 2em;
+            cursor: pointer;
+            padding: 5px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            transition: background-color 0.2s;
+        }
+        .resurrection-option:hover {
+            background-color: #f0f0f0;
+        }
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 90;
+            display: none;
+        }
+    </style>
 </head>
 <body>
-  <div class="wrap">
-    <div class="row" style="margin-bottom:12px">
-      <div class="title">転生チェス — Reincarnation Chess (MVP)</div>
-      <label class="row" style="gap:6px">
-        <span class="small">Side</span>
-        <select id="side" class="select">
-          <option value="w">White（先手）</option>
-          <option value="b">Black（後手）</option>
-        </select>
-      </label>
-      <button id="newgame" class="btn">New Game</button>
-    </div>
-
-    <div class="grid">
-      <div class="card">
-        <div class="row" style="justify-content:space-between; margin-bottom:10px">
-          <h3 style="margin:0">Board</h3>
-          <div class="toolbar">
-            <span class="small">昇格先</span>
-            <div class="seg" id="promo-seg">
-              <button data-p="q" class="active">Q</button>
-              <button data-p="r">R</button>
-              <button data-p="b">B</button>
-              <button data-p="n">N</button>
+    <h1>転生チェス</h1>
+    <div id="message"></div>
+    <div id="current-turn">白のターン</div>
+    <div id="board-container">
+        <div id="board"></div>
+        <div class="resurrection-dialog" id="resurrectionDialog">
+            <p>駒を選んで転生させてください</p>
+            <div class="resurrection-options">
+                <span class="resurrection-option piece" data-piece-type="queen">♕</span>
+                <span class="resurrection-option piece" data-piece-type="rook">♖</span>
+                <span class="resurrection-option piece" data-piece-type="bishop">♗</span>
+                <span class="resurrection-option piece" data-piece-type="knight">♘</span>
             </div>
-          </div>
         </div>
-        <!-- 盤（内蔵テーマ / ドラッグ可） -->
-        <chess-board id="board" draggable-pieces position="start" coordinates></chess-board>
-        <div class="row" style="margin-top:10px; justify-content:space-between">
-          <div class="status" id="status">白の手番</div>
-        </div>
-      </div>
-
-      <div class="stack">
-        <div class="card">
-          <div class="section-title">転生待ちキュー</div>
-          <ul id="queue" class="queue" style="margin:0; padding-left:16px"></ul>
-          <p class="small" style="margin-top:8px">※ キングには転生しません。配置は自陣最奥列の空きマスへ。元種と異なるランダムな別種に変化します。</p>
-        </div>
-
-        <div class="card">
-          <div class="section-title">ログ</div>
-          <ol id="log" class="log" style="margin:0; padding-left:18px"></ol>
-        </div>
-
-        <div class="card">
-          <div class="section-title">ルール（MVP）</div>
-          <ul class="small" style="margin:0; padding-left:18px; line-height:1.5">
-            <li>通常チェス + 「手番開始時の転生」フェーズ。</li>
-            <li>自分が直前までに取られていれば、1体だけ自陣最奥列の空きへ蘇生。</li>
-            <li>蘇生する種はキング除外の5種から、元種と異なるランダム。</li>
-            <li>空きがなければスキップ（次回に持ち越し）。</li>
-          </ul>
-        </div>
-      </div>
     </div>
-  </div>
+    <div id="captured-pieces-container">
+        <div class="captured-pieces white-captured">
+            <h3>白の捕獲済み</h3>
+        </div>
+        <div class="captured-pieces black-captured">
+            <h3>黒の捕獲済み</h3>
+        </div>
+    </div>
+    <button id="resurrect-button">転生する</button>
+    <div class="overlay" id="overlay"></div>
 
-  <script>
-    // ===== 基本設定 =====
-    const BACK = { w: ['a1','b1','c1','d1','e1','f1','g1','h1'], b: ['a8','b8','c8','d8','e8','f8','g8','h8'] };
-    const LABEL = { p:'ポーン', n:'ナイト', b:'ビショップ', r:'ルーク', q:'クイーン', k:'キング' };
-    const pieceName = t => LABEL[t] || t;
-    const pick = arr => arr[Math.floor(Math.random()*arr.length)];
-    const val = { p:1, n:3, b:3, r:5, q:9 };
-    const expectedEV = (original) => {
-      const pool = ['p','n','b','r','q'].filter(t => t !== original);
-      return pool.reduce((a,t)=>a+val[t],0)/pool.length;
-    };
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const boardEl = document.getElementById('board');
+            const messageEl = document.getElementById('message');
+            const currentTurnEl = document.getElementById('current-turn');
+            const whiteCapturedEl = document.querySelector('.white-captured');
+            const blackCapturedEl = document.querySelector('.black-captured');
+            const resurrectButton = document.getElementById('resurrect-button');
+            const resurrectionDialog = document.getElementById('resurrectionDialog');
+            const overlay = document.getElementById('overlay');
 
-    // ===== 状態 =====
-    let HUMAN = 'w';
-    let game = new Chess();
-    let queue = [];
-    let promo = 'q';
+            const pieceMap = {
+                'king': { white: '♔', black: '♚' },
+                'queen': { white: '♕', black: '♛' },
+                'rook': { white: '♖', black: '♜' },
+                'bishop': { white: '♗', black: '♝' },
+                'knight': { white: '♘', black: '♞' },
+                'pawn': { white: '♙', black: '♟' }
+            };
 
-    // ===== DOM =====
-    const boardEl = document.getElementById('board');
-    const statusEl = document.getElementById('status');
-    const queueEl  = document.getElementById('queue');
-    const logEl    = document.getElementById('log');
+            const board = [];
+            let selectedPiece = null;
+            let currentTurn = 'white';
+            const capturedPieces = { white: [], black: [] };
+            let isResurrectionMode = false;
+            let selectedCapturedPiece = null;
 
-    document.getElementById('newgame').addEventListener('click', () => startNew(document.getElementById('side').value));
-    document.getElementById('side').addEventListener('change', (e)=> startNew(e.target.value));
-    document.querySelectorAll('#promo-seg button').forEach(btn=>{
-      btn.addEventListener('click', ()=>{
-        document.querySelectorAll('#promo-seg button').forEach(b=>b.classList.remove('active'));
-        btn.classList.add('active'); promo = btn.dataset.p;
-      });
-    });
-
-    // ===== 表示 =====
-    function updateStatus(extra=''){
-      let s = game.isCheckmate() ? 'チェックメイト！'
-            : game.isStalemate() ? 'ステイルメイト'
-            : game.isDraw()      ? '引き分け'
-            : (game.turn()==='w'?'白':'黒') + ' の手番';
-      if (game.isCheck() && !game.isCheckmate()) s += '（チェック中）';
-      if (extra) s += extra;
-      statusEl.textContent = s;
-    }
-    function renderQueue(){
-      queueEl.innerHTML = '';
-      if (!queue.length){
-        const li = document.createElement('li');
-        li.innerHTML = '<span class="small" style="color:#60707f">（なし）</span>';
-        queueEl.appendChild(li);
-        return;
-      }
-      queue.forEach((q,i)=>{
-        const li = document.createElement('li');
-        li.innerHTML = `<span class="dot ${q.color}"></span> ${i+1}. ${q.color==='w'?'白':'黒'}：${pieceName(q.original)} が次手番に転生`;
-        queueEl.appendChild(li);
-      });
-    }
-    function log(line){
-      const li = document.createElement('li');
-      li.textContent = line;
-      logEl.insertBefore(li, logEl.firstChild);
-    }
-    function syncBoard(){ boardEl.setPosition(game.fen(), true); }
-
-    // ===== 転生 =====
-    function reincarnateIfAny(color){
-      const idx = queue.findIndex(q => q.color === color);
-      if (idx === -1) return false;
-      const empty = BACK[color].filter(sq => !game.get(sq));
-      if (!empty.length) return false;
-
-      const item = queue[idx];
-      const pool = ['p','n','b','r','q'].filter(t => t !== item.original);
-      const newType = pick(pool);
-      const square  = pick(empty);
-
-      game.put({ type:newType, color }, square);
-      queue.splice(idx,1);
-      syncBoard();
-      log(`【転生】${color==='w'?'白':'黒'}の${pieceName(item.original)}が ${square} に ${pieceName(newType)} として復活。`);
-      renderQueue();
-      return true;
-    }
-
-    // ===== AI =====
-    function material(forColor){
-      let s=0;
-      for (const row of game.board()){
-        for (const c of row){
-          if (!c || c.color!==forColor || c.type==='k') continue;
-          s += val[c.type];
-        }
-      }
-      return s;
-    }
-    function aiEval(move){
-      const clone = new Chess(game.fen());
-      const r = clone.move(move);
-      if (!r) return -999;
-      if (clone.isCheckmate()) return 1000;
-      if (clone.isStalemate()) return 0;
-      const mat = material('b') - material('w');
-      const penalty = r.captured ? expectedEV(r.captured) : 0;
-      return mat - penalty*0.8;
-    }
-    function aiTurn(){
-      if (game.game_over() || game.turn()!=='b') return;
-      reincarnateIfAny('b');
-      const moves = game.moves({ verbose:true });
-      if (!moves.length){ updateStatus(); return; }
-      let best = moves[0], bestScore = -Infinity;
-      for (const m of moves){ const s = aiEval(m); if (s > bestScore){ bestScore = s; best = m; } }
-      doMove(best.from, best.to, best.promotion);
-      if (game.turn()==='w'){ reincarnateIfAny('w'); }
-      updateStatus();
-    }
-
-    // ===== 着手適用 =====
-    function doMove(from, to, promotion){
-      const res = game.move({ from, to, promotion });
-      if (!res) return false;
-      if (res.captured){
-        const capturedType = res.captured;
-        const capturedColor = res.color === 'w' ? 'b' : 'w';
-        queue.push({ color: capturedColor, original: capturedType, id: `${Date.now()}-${Math.random()}` });
-        log(`【捕獲】${res.color==='w'?'白':'黒'} が ${res.to} で ${capturedColor==='w'?'白':'黒'}の ${pieceName(capturedType)} を取った。`);
-        renderQueue();
-      }
-      log(`【着手】${res.color==='w'?'白':'黒'}: ${res.san}`);
-      syncBoard();
-      return true;
-    }
-
-    // ===== 盤イベント（chessboard-element） =====
-    boardEl.addEventListener('drag-start', (e)=>{
-      const { piece } = e.detail; // 例: "wP"
-      if (game.game_over()) return e.preventDefault();
-      if (game.turn() !== HUMAN) return e.preventDefault();
-      if ((HUMAN==='w' && piece[0]==='b') || (HUMAN==='b' && piece[0]==='w')) return e.preventDefault();
-    });
-
-    boardEl.addEventListener('drop', (e)=>{
-      const { source, target } = e.detail; // 例: "e2" -> "e4"
-      const moving = game.get(source);
-      const isPromo = moving && moving.type==='p' &&
-        ((HUMAN==='w' && /8$/.test(target)) || (HUMAN==='b' && /1$/.test(target)));
-      const tryMove = { from: source, to: target, promotion: isPromo ? promo : undefined };
-      const result = game.move(tryMove);
-      if (result === null){ e.preventDefault(); return; } // 非合法 → 元に戻す
-      game.undo(); // 共通処理のため一旦戻す
-      doMove(source, target, isPromo ? promo : undefined);
-
-      // 人間の手後：黒手番開始 → 黒の転生→AI着手
-      setTimeout(()=> {
-        if (HUMAN==='w'){
-          reincarnateIfAny('b'); updateStatus(); setTimeout(aiTurn, 140);
-        } else {
-          // HUMANが黒＝AIが先手
-          reincarnateIfAny('w');
-        }
-      }, 120);
-    });
-
-    boardEl.addEventListener('snap-end', ()=> syncBoard());
-
-    // ===== 新規開始 =====
-    function startNew(side){
-      HUMAN = side; queue = []; game = new Chess();
-      boardEl.orientation = (HUMAN==='w') ? 'white' : 'black';
-      boardEl.setPosition('start', false);
-      logEl.innerHTML = ''; log('新規ゲーム開始。' + (HUMAN==='w'?'白':'黒') + 'でプレイ。');
-      renderQueue(); updateStatus();
-      if (HUMAN==='b'){
-        setTimeout(()=>{
-          reincarnateIfAny('w'); updateStatus('（AI思考中…）');
-          setTimeout(()=>{
-            const moves = game.moves({ verbose:true });
-            if (moves.length){
-              let best=moves[0], bestScore=-Infinity;
-              for (const m of moves){
-                const clone = new Chess(game.fen()); const r=clone.move(m);
-                if (!r) continue;
-                let score = (material('w') - material('b')) - (r.captured?expectedEV(r.captured):0)*0.8;
-                if (clone.isCheckmate()) score = 1000;
-                if (clone.isStalemate()) score = 0;
-                if (score>bestScore){ bestScore=score; best=m; }
-              }
-              doMove(best.from, best.to, best.promotion);
+            function createBoard() {
+                boardEl.innerHTML = '';
+                for (let i = 0; i < 8; i++) {
+                    board[i] = [];
+                    for (let j = 0; j < 8; j++) {
+                        const square = document.createElement('div');
+                        square.classList.add('square');
+                        square.classList.add((i + j) % 2 === 0 ? 'light' : 'dark');
+                        square.dataset.row = i;
+                        square.dataset.col = j;
+                        boardEl.appendChild(square);
+                        board[i][j] = null;
+                    }
+                }
             }
-            if (game.turn()==='b') { reincarnateIfAny('b'); }
-            updateStatus();
-          }, 180);
-        }, 120);
-      }
-    }
 
-    // 初期
-    window.addEventListener('load', ()=>{
-      renderQueue(); log('新規ゲーム開始。白の手番。'); updateStatus();
-      // 念のためリサイズ時にも盤はSVGなので何もしなくてOK
-    });
-  </script>
-</body>
-</html>
+            function setupPieces() {
+                // 白
+                board[7][0] = { type: 'rook', color: 'white' };
+                board[7][1] = { type: 'knight', color: 'white' };
+                board[7][2] = { type: 'bishop', color: 'white' };
+                board[7][3] = { type: 'queen', color: 'white' };
+                board[7][4] = { type: 'king', color: 'white' };
+                board[7][5] = { type: 'bishop', color: 'white' };
+                board[7][6] = { type: 'knight', color: 'white' };
+                board[7][7] = { type: 'rook', color: 'white' };
+                for (let j = 0; j < 8; j++) {
+                    board[6][j] = { type: 'pawn', color: 'white' };
+                }
+
+                // 黒
+                board[0][0] = { type: 'rook', color: 'black' };
+                board[0][1] = { type: 'knight', color: 'black' };
+                board[0][2] = { type: 'bishop', color: 'black' };
+                board[0][3] = { type: 'queen', color: 'black' };
+                board[0][4] = { type: 'king', color: 'black' };
+                board[0][5] = { type: 'bishop', color: 'black' };
+                board[0][6] = { type: 'knight', color: 'black' };
+                board[0][7] = { type: 'rook', color: 'black' };
+                for (let j = 0; j < 8; j++) {
+                    board[1][j] = { type: 'pawn', color: 'black' };
+                }
+            }
+
+            function renderBoard() {
+                const squares = boardEl.querySelectorAll('.square');
+                squares.forEach(square => {
+                    const row = square.dataset.row;
+                    const col = square.dataset.col;
+                    square.innerHTML = '';
+                    square.classList.remove('selected', 'legal-
