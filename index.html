@@ -4,12 +4,8 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
   <title>転生チェス（Reincarnation Chess）MVP</title>
-
-  <!-- 盤UIライブラリ（chessboard.js） -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
-
   <style>
-    :root { --bg:#eef6f2; --card:#fff; --ink:#0b1320; --muted:#60707f; }
+    :root { --bg:#eef6f2; --card:#fff; --ink:#0b1320; --muted:#60707f; --board-size: min(96vw, 640px); }
     html,body { margin:0; background:var(--bg); color:var(--ink); font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
     .wrap { max-width:1150px; margin:0 auto; padding:16px; }
     .row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
@@ -30,11 +26,15 @@
     .seg { display:flex; gap:4px; border:1px solid #e5e7eb; border-radius:999px; padding:3px; background:#fff; }
     .seg button { padding:4px 10px; border:none; background:transparent; border-radius:999px; cursor:pointer; font-size:13px; }
     .seg button.active { background:#0b1320; color:#fff; }
-    /* ここが重要：初期サイズを必ず付ける */
-    #board { width: min(96vw, 640px); height: min(96vw, 640px); margin: 0 auto; }
+    /* 盤サイズはCSS変数で制御（内蔵SVGなのでこれだけでOK） */
+    chess-board { width: var(--board-size); max-width: 100%; margin: 0 auto; }
     .status { font-size:14px; }
     .section-title { font-weight:700; margin:8px 0 12px; }
   </style>
+  <!-- 盤コンポーネント（内蔵SVG・画像不要） -->
+  <script type="module" src="https://unpkg.com/chessboard-element@2.4.0/dist/chessboard-element.js"></script>
+  <!-- ルールエンジン -->
+  <script src="https://cdn.jsdelivr.net/npm/chess.js@1.0.0/dist/chess.min.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -64,7 +64,8 @@
             </div>
           </div>
         </div>
-        <div id="board"></div>
+        <!-- 盤（内蔵テーマ / ドラッグ可） -->
+        <chess-board id="board" draggable-pieces position="start" coordinates></chess-board>
         <div class="row" style="margin-top:10px; justify-content:space-between">
           <div class="status" id="status">白の手番</div>
         </div>
@@ -95,17 +96,12 @@
     </div>
   </div>
 
-  <!-- 依存ライブラリ -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chess.js@1.0.0/dist/chess.min.js"></script>
-
   <script>
     // ===== 基本設定 =====
     const BACK = { w: ['a1','b1','c1','d1','e1','f1','g1','h1'], b: ['a8','b8','c8','d8','e8','f8','g8','h8'] };
     const LABEL = { p:'ポーン', n:'ナイト', b:'ビショップ', r:'ルーク', q:'クイーン', k:'キング' };
     const pieceName = t => LABEL[t] || t;
     const pick = arr => arr[Math.floor(Math.random()*arr.length)];
-    const opposite = c => c==='w'?'b':'w';
     const val = { p:1, n:3, b:3, r:5, q:9 };
     const expectedEV = (original) => {
       const pool = ['p','n','b','r','q'].filter(t => t !== original);
@@ -115,11 +111,11 @@
     // ===== 状態 =====
     let HUMAN = 'w';
     let game = new Chess();
-    let board = null;
     let queue = [];
     let promo = 'q';
 
     // ===== DOM =====
+    const boardEl = document.getElementById('board');
     const statusEl = document.getElementById('status');
     const queueEl  = document.getElementById('queue');
     const logEl    = document.getElementById('log');
@@ -133,13 +129,14 @@
       });
     });
 
-    function updateStatus(textExtra=''){
+    // ===== 表示 =====
+    function updateStatus(extra=''){
       let s = game.isCheckmate() ? 'チェックメイト！'
             : game.isStalemate() ? 'ステイルメイト'
             : game.isDraw()      ? '引き分け'
             : (game.turn()==='w'?'白':'黒') + ' の手番';
       if (game.isCheck() && !game.isCheckmate()) s += '（チェック中）';
-      if (textExtra) s += textExtra;
+      if (extra) s += extra;
       statusEl.textContent = s;
     }
     function renderQueue(){
@@ -161,7 +158,9 @@
       li.textContent = line;
       logEl.insertBefore(li, logEl.firstChild);
     }
+    function syncBoard(){ boardEl.setPosition(game.fen(), true); }
 
+    // ===== 転生 =====
     function reincarnateIfAny(color){
       const idx = queue.findIndex(q => q.color === color);
       if (idx === -1) return false;
@@ -175,13 +174,14 @@
 
       game.put({ type:newType, color }, square);
       queue.splice(idx,1);
-      board.position(game.fen(), true);
+      syncBoard();
       log(`【転生】${color==='w'?'白':'黒'}の${pieceName(item.original)}が ${square} に ${pieceName(newType)} として復活。`);
       renderQueue();
       return true;
     }
 
-    function aiMaterial(forColor){
+    // ===== AI =====
+    function material(forColor){
       let s=0;
       for (const row of game.board()){
         for (const c of row){
@@ -197,7 +197,7 @@
       if (!r) return -999;
       if (clone.isCheckmate()) return 1000;
       if (clone.isStalemate()) return 0;
-      const mat = aiMaterial('b') - aiMaterial('w');
+      const mat = material('b') - material('w');
       const penalty = r.captured ? expectedEV(r.captured) : 0;
       return mat - penalty*0.8;
     }
@@ -213,6 +213,7 @@
       updateStatus();
     }
 
+    // ===== 着手適用 =====
     function doMove(from, to, promotion){
       const res = game.move({ from, to, promotion });
       if (!res) return false;
@@ -224,49 +225,52 @@
         renderQueue();
       }
       log(`【着手】${res.color==='w'?'白':'黒'}: ${res.san}`);
-      board.position(game.fen(), true);
+      syncBoard();
       return true;
     }
 
-    function onDragStart (source, piece) {
-      if (game.game_over()) return false;
-      if (game.turn() !== HUMAN) return false;
-      if ((HUMAN === 'w' && piece.startsWith('b')) || (HUMAN === 'b' && piece.startsWith('w'))) return false;
-    }
-    function onDrop (source, target) {
+    // ===== 盤イベント（chessboard-element） =====
+    boardEl.addEventListener('drag-start', (e)=>{
+      const { piece } = e.detail; // 例: "wP"
+      if (game.game_over()) return e.preventDefault();
+      if (game.turn() !== HUMAN) return e.preventDefault();
+      if ((HUMAN==='w' && piece[0]==='b') || (HUMAN==='b' && piece[0]==='w')) return e.preventDefault();
+    });
+
+    boardEl.addEventListener('drop', (e)=>{
+      const { source, target } = e.detail; // 例: "e2" -> "e4"
       const moving = game.get(source);
       const isPromo = moving && moving.type==='p' &&
         ((HUMAN==='w' && /8$/.test(target)) || (HUMAN==='b' && /1$/.test(target)));
-
       const tryMove = { from: source, to: target, promotion: isPromo ? promo : undefined };
       const result = game.move(tryMove);
-      if (result === null) return 'snapback';
-      game.undo();
+      if (result === null){ e.preventDefault(); return; } // 非合法 → 元に戻す
+      game.undo(); // 共通処理のため一旦戻す
       doMove(source, target, isPromo ? promo : undefined);
 
+      // 人間の手後：黒手番開始 → 黒の転生→AI着手
       setTimeout(()=> {
         if (HUMAN==='w'){
-          reincarnateIfAny('b');
-          updateStatus();
-          setTimeout(aiTurn, 140);
+          reincarnateIfAny('b'); updateStatus(); setTimeout(aiTurn, 140);
         } else {
+          // HUMANが黒＝AIが先手
           reincarnateIfAny('w');
         }
       }, 120);
-    }
-    function onSnapEnd () { board.position(game.fen()); }
+    });
 
+    boardEl.addEventListener('snap-end', ()=> syncBoard());
+
+    // ===== 新規開始 =====
     function startNew(side){
       HUMAN = side; queue = []; game = new Chess();
-      const orient = (HUMAN==='w') ? 'white' : 'black';
-      board.orientation(orient);
-      board.position('start', false);
+      boardEl.orientation = (HUMAN==='w') ? 'white' : 'black';
+      boardEl.setPosition('start', false);
       logEl.innerHTML = ''; log('新規ゲーム開始。' + (HUMAN==='w'?'白':'黒') + 'でプレイ。');
       renderQueue(); updateStatus();
       if (HUMAN==='b'){
         setTimeout(()=>{
-          reincarnateIfAny('w');
-          updateStatus('（AI思考中…）');
+          reincarnateIfAny('w'); updateStatus('（AI思考中…）');
           setTimeout(()=>{
             const moves = game.moves({ verbose:true });
             if (moves.length){
@@ -274,7 +278,7 @@
               for (const m of moves){
                 const clone = new Chess(game.fen()); const r=clone.move(m);
                 if (!r) continue;
-                let score = (aiMaterial('w') - aiMaterial('b')) - (r.captured?expectedEV(r.captured):0)*0.8;
+                let score = (material('w') - material('b')) - (r.captured?expectedEV(r.captured):0)*0.8;
                 if (clone.isCheckmate()) score = 1000;
                 if (clone.isStalemate()) score = 0;
                 if (score>bestScore){ bestScore=score; best=m; }
@@ -288,25 +292,11 @@
       }
     }
 
-    function init(){
-      try{
-        board = Chessboard('board', {
-          position: 'start',
-          draggable: true,
-          pieceTheme: 'https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/img/chesspieces/wikipedia/{piece}.png',
-          onDragStart, onDrop, onSnapEnd,
-          orientation: 'white'
-        });
-        // 初期リサイズ（ここ重要）
-        board.resize();
-      } catch (e){
-        console.error(e);
-        log('❗盤の初期化に失敗しました。ネットワークやContent Blockerを確認してください。');
-      }
+    // 初期
+    window.addEventListener('load', ()=>{
       renderQueue(); log('新規ゲーム開始。白の手番。'); updateStatus();
-      window.addEventListener('resize', () => board && board.resize());
-    }
-    window.addEventListener('load', init);
+      // 念のためリサイズ時にも盤はSVGなので何もしなくてOK
+    });
   </script>
 </body>
 </html>
