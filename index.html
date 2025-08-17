@@ -5,82 +5,104 @@
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
   <title>転生チェス（Reincarnation Chess）MVP</title>
 
-  <!-- chessboard.js のCSS -->
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.css" integrity="sha512-e1z9v8uLq9wE6K1t1y0H0zUvdR3+QyN6h4+Kp7m7Z7Jqv0gk6w2wQv3y3wQ3u2h7bP7z1nP3m0QH2kEJ9rXfVg==" crossorigin="anonymous" referrerpolicy="no-referrer" />
+  <!-- 盤UIライブラリ（chessboard.js） -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.css" crossorigin="anonymous" referrerpolicy="no-referrer" />
 
   <style>
-    :root { --bg:#f6f6f6; --card:#fff; --ink:#111; --muted:#6b7280; }
+    :root { --bg:#eef6f2; --card:#fff; --ink:#0b1320; --muted:#60707f; }
     html,body { margin:0; background:var(--bg); color:var(--ink); font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
-    .wrap { max-width:1100px; margin:0 auto; padding:16px; }
+    .wrap { max-width:1150px; margin:0 auto; padding:16px; }
+    .row { display:flex; align-items:center; gap:12px; flex-wrap:wrap; }
+    .title { font-size:28px; font-weight:800; letter-spacing:.2px; margin-right:auto; }
+    .select, .btn { border:1px solid #e5e7eb; background:#fff; border-radius:12px; padding:10px 12px; font-size:14px; }
+    .btn { cursor:pointer; box-shadow:0 2px 6px rgba(0,0,0,.06); }
     .grid { display:grid; gap:16px; grid-template-columns: 1fr; }
-    @media (min-width: 920px){ .grid { grid-template-columns: 2fr 1fr; } }
-    .card { background:var(--card); border-radius:16px; box-shadow:0 6px 16px rgba(0,0,0,.06); padding:16px; }
-    .row { display:flex; align-items:center; justify-content:space-between; gap:8px; flex-wrap:wrap; }
-    .title { font-weight:700; font-size:22px; }
-    .btn { border:1px solid #e5e7eb; background:#fff; border-radius:999px; padding:8px 12px; cursor:pointer; }
-    .btn.primary { background:#111; color:#fff; }
+    @media (min-width: 980px){ .grid { grid-template-columns: 2fr 1fr; } }
+    .card { background:var(--card); border-radius:16px; box-shadow:0 10px 24px rgba(0,0,0,.08); padding:16px; }
+    h3 { margin:0 0 10px 0; font-size:18px; }
     .small { font-size:12px; color:var(--muted); }
-    .seg { display:flex; gap:4px; border:1px solid #e5e7eb; border-radius:999px; padding:3px; background:#fff; }
-    .seg button { padding:4px 10px; border:none; background:transparent; border-radius:999px; cursor:pointer; }
-    .seg button.active { background:#111; color:#fff; }
-    .status { font-size:14px; }
+    .stack { display:flex; flex-direction:column; gap:12px; }
     .queue li { display:flex; align-items:center; gap:8px; font-size:14px; }
     .dot { width:8px; height:8px; border-radius:999px; display:inline-block; }
     .dot.w { background:#3b82f6; } .dot.b { background:#ef4444; }
-    .log { max-height:260px; overflow:auto; font-size:14px; }
-    #board { max-width: 640px; margin: 0 auto; }
+    .log { max-height:300px; overflow:auto; font-size:14px; border:1px dashed #e5e7eb; border-radius:12px; padding:10px; background:#fafafa; }
+    .toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .seg { display:flex; gap:4px; border:1px solid #e5e7eb; border-radius:999px; padding:3px; background:#fff; }
+    .seg button { padding:4px 10px; border:none; background:transparent; border-radius:999px; cursor:pointer; font-size:13px; }
+    .seg button.active { background:#0b1320; color:#fff; }
+    #board { max-width: 720px; margin: 0 auto; }
+    .status { font-size:14px; }
+    .section-title { font-weight:700; margin:8px 0 12px; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <div class="row" style="margin-bottom:10px">
-      <div class="title">転生チェス（Reincarnation Chess）MVP</div>
-      <div class="row">
-        <div class="small">昇格先</div>
-        <div class="seg" id="promo-seg">
-          <button data-p="q" class="active">クイーン</button>
-          <button data-p="r">ルーク</button>
-          <button data-p="b">ビショップ</button>
-          <button data-p="n">ナイト</button>
-        </div>
-        <button id="btn-reset" class="btn">新規ゲーム</button>
-      </div>
+    <!-- ヘッダー -->
+    <div class="row" style="margin-bottom:12px">
+      <div class="title">転生チェス — Reincarnation Chess (MVP)</div>
+      <label class="row" style="gap:6px">
+        <span class="small">Side</span>
+        <select id="side" class="select">
+          <option value="w">White（先手）</option>
+          <option value="b">Black（後手）</option>
+        </select>
+      </label>
+      <button id="newgame" class="btn">New Game</button>
     </div>
 
     <div class="grid">
+      <!-- 左：盤 -->
       <div class="card">
+        <div class="row" style="justify-content:space-between; margin-bottom:10px">
+          <h3 style="margin:0">Board</h3>
+          <div class="toolbar">
+            <span class="small">昇格先</span>
+            <div class="seg" id="promo-seg">
+              <button data-p="q" class="active">Q</button>
+              <button data-p="r">R</button>
+              <button data-p="b">B</button>
+              <button data-p="n">N</button>
+            </div>
+          </div>
+        </div>
         <div id="board"></div>
-        <div class="row" style="margin-top:10px">
+        <div class="row" style="margin-top:10px; justify-content:space-between">
           <div class="status" id="status">白の手番</div>
         </div>
       </div>
 
-      <div class="card">
-        <h3 style="margin:0 0 8px 0; font-size:16px">転生待ちキュー</h3>
-        <ul id="queue" class="queue" style="margin:0; padding-left:16px"></ul>
-        <p class="small">※ キングには転生しません。配置は自陣最奥列の空きマスへ。元種と異なるランダムな別種に変化します。</p>
+      <!-- 右：キュー/ログ/ルール -->
+      <div class="stack">
+        <div class="card">
+          <div class="section-title">転生待ちキュー</div>
+          <ul id="queue" class="queue" style="margin:0; padding-left:16px"></ul>
+          <p class="small" style="margin-top:8px">※ キングには転生しません。配置は自陣最奥列の空きマスへ。元種と異なるランダムな別種に変化します。</p>
+        </div>
 
-        <h3 style="margin:16px 0 8px 0; font-size:16px">ログ</h3>
-        <ol id="log" class="log" style="margin:0; padding-left:18px"></ol>
+        <div class="card">
+          <div class="section-title">ログ</div>
+          <ol id="log" class="log" style="margin:0; padding-left:18px"></ol>
+        </div>
 
-        <h3 style="margin:16px 0 8px 0; font-size:16px">ルール（MVP）</h3>
-        <ul class="small" style="margin:0; padding-left:18px; line-height:1.5">
-          <li>通常チェス + 「手番開始時の転生」フェーズ。</li>
-          <li>自分が直前までに取られていれば、1体だけ自陣最奥列の空きへ蘇生。</li>
-          <li>蘇生する種はキング除外の5種から、元種と異なるランダム。</li>
-          <li>空きがなければスキップ（次回に持ち越し）。</li>
-        </ul>
+        <div class="card">
+          <div class="section-title">ルール（MVP）</div>
+          <ul class="small" style="margin:0; padding-left:18px; line-height:1.5">
+            <li>通常チェス + 「手番開始時の転生」フェーズ。</li>
+            <li>自分が直前までに取られていれば、1体だけ自陣最奥列の空きへ蘇生。</li>
+            <li>蘇生する種はキング除外の5種から、元種と異なるランダム。</li>
+            <li>空きがなければスキップ（次回に持ち越し）。</li>
+          </ul>
+        </div>
       </div>
     </div>
   </div>
 
-  <!-- 依存ライブラリ（UMD/非モジュール版） -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.js" integrity="sha512-Jv3wGqk3fG7o/lVd8sC8ZzJqS6kT5N6mQ0o0zYw0K2zX3X2w0h1tf8g8q8Qm7A5n8q3C9j6z2k7pS7QfG8jQtA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <!-- 依存ライブラリ -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/chessboard-1.0.0.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <script src="https://cdn.jsdelivr.net/npm/chess.js@1.0.0/dist/chess.min.js"></script>
 
   <script>
-    // --- 設定 --------------------------------------------------------------
-    const HUMAN = 'w'; // 人間＝白
+    // ===== 基本設定 =====
     const BACK = { w: ['a1','b1','c1','d1','e1','f1','g1','h1'], b: ['a8','b8','c8','d8','e8','f8','g8','h8'] };
     const LABEL = { p:'ポーン', n:'ナイト', b:'ビショップ', r:'ルーク', q:'クイーン', k:'キング' };
     const pieceName = t => LABEL[t] || t;
@@ -92,39 +114,42 @@
       return pool.reduce((a,t)=>a+val[t],0)/pool.length;
     };
 
-    // --- 状態 --------------------------------------------------------------
-    let game = new Chess();       // ルールエンジン
-    let board = null;             // 盤UI
-    let queue = [];               // [{color, original, id}]
-    let promo = 'q';              // 昇格先
+    // ===== 状態 =====
+    let HUMAN = 'w';          // 人間の色
+    let game = new Chess();   // ルール
+    let board = null;         // 盤UI
+    let queue = [];           // 転生待ち [{color, original, id}]
+    let promo = 'q';          // 昇格先
 
-    // --- UI DOM -----------------------------------------------------------
+    // ===== DOM =====
     const statusEl = document.getElementById('status');
     const queueEl  = document.getElementById('queue');
     const logEl    = document.getElementById('log');
 
-    document.getElementById('btn-reset').addEventListener('click', resetGame);
+    document.getElementById('newgame').addEventListener('click', () => startNew(document.getElementById('side').value));
+    document.getElementById('side').addEventListener('change', (e)=> startNew(e.target.value));
     document.querySelectorAll('#promo-seg button').forEach(btn=>{
       btn.addEventListener('click', ()=>{
         document.querySelectorAll('#promo-seg button').forEach(b=>b.classList.remove('active'));
-        btn.classList.add('active');
-        promo = btn.dataset.p;
+        btn.classList.add('active'); promo = btn.dataset.p;
       });
     });
 
-    function updateStatus(){
+    // ===== 表示系 =====
+    function updateStatus(textExtra=''){
       let s = game.isCheckmate() ? 'チェックメイト！'
             : game.isStalemate() ? 'ステイルメイト'
             : game.isDraw()      ? '引き分け'
             : (game.turn()==='w'?'白':'黒') + ' の手番';
       if (game.isCheck() && !game.isCheckmate()) s += '（チェック中）';
+      if (textExtra) s += textExtra;
       statusEl.textContent = s;
     }
     function renderQueue(){
       queueEl.innerHTML = '';
       if (!queue.length){
         const li = document.createElement('li');
-        li.innerHTML = '<span class="small" style="color:var(--muted)">（なし）</span>';
+        li.innerHTML = '<span class="small" style="color:#60707f">（なし）</span>';
         queueEl.appendChild(li);
         return;
       }
@@ -140,7 +165,7 @@
       logEl.insertBefore(li, logEl.firstChild);
     }
 
-    // --- 転生 --------------------------------------------------------------
+    // ===== 転生 =====
     function reincarnateIfAny(color){
       const idx = queue.findIndex(q => q.color === color);
       if (idx === -1) return false;
@@ -152,9 +177,7 @@
       const newType = pick(pool);
       const square  = pick(empty);
 
-      // chess.js v1.0.0 は put をサポート
       game.put({ type:newType, color }, square);
-
       queue.splice(idx,1);
       board.position(game.fen(), true);
       log(`【転生】${color==='w'?'白':'黒'}の${pieceName(item.original)}が ${square} に ${pieceName(newType)} として復活。`);
@@ -162,7 +185,7 @@
       return true;
     }
 
-    // --- AI ---------------------------------------------------------------
+    // ===== AI =====
     function aiMaterial(forColor){
       let s=0;
       for (const row of game.board()){
@@ -185,29 +208,19 @@
     }
     function aiTurn(){
       if (game.game_over() || game.turn()!=='b') return;
-
-      // 転生→着手
-      reincarnateIfAny('b');
-
+      reincarnateIfAny('b');         // AI手番開始 → 転生
       const moves = game.moves({ verbose:true });
-      if (!moves.length) { updateStatus(); return; }
-
+      if (!moves.length){ updateStatus(); return; }
       let best = moves[0], bestScore = -Infinity;
-      for (const m of moves){
-        const s = aiEval(m);
-        if (s > bestScore){ bestScore = s; best = m; }
-      }
-
+      for (const m of moves){ const s = aiEval(m); if (s > bestScore){ bestScore = s; best = m; } }
       doMove(best.from, best.to, best.promotion);
-
-      // AIの手が終わったら白手番開始＝白の転生
-      if (game.turn()==='w'){
+      if (game.turn()==='w'){        // AIの手後、白手番開始 → 白の転生
         reincarnateIfAny('w');
       }
       updateStatus();
     }
 
-    // --- 移動共通処理 -----------------------------------------------------
+    // ===== 共通：指し手適用 =====
     function doMove(from, to, promotion){
       const res = game.move({ from, to, promotion });
       if (!res) return false;
@@ -224,69 +237,90 @@
       return true;
     }
 
-    // --- chessboard.js のイベント -----------------------------------------
-    function onDragStart (source, piece, position, orientation) {
-      // ゲーム終局 or 自分の手番じゃない or 逆サイドの駒 → 拒否
+    // ===== 盤UIイベント =====
+    function onDragStart (source, piece) {
       if (game.game_over()) return false;
       if (game.turn() !== HUMAN) return false;
       if ((HUMAN === 'w' && piece.startsWith('b')) || (HUMAN === 'b' && piece.startsWith('w'))) return false;
     }
-
     function onDrop (source, target) {
-      // 昇格判定（自動で選択した駒に昇格）
+      // 昇格判定
       const moving = game.get(source);
       const isPromo = moving && moving.type==='p' &&
         ((HUMAN==='w' && /8$/.test(target)) || (HUMAN==='b' && /1$/.test(target)));
 
-      const move = { from: source, to: target, promotion: isPromo ? promo : undefined };
-      const result = game.move(move);
-
+      const tryMove = { from: source, to: target, promotion: isPromo ? promo : undefined };
+      const result = game.move(tryMove);
       if (result === null) return 'snapback'; // 非合法
-      // 戻して共通処理で進める（棋譜やキュー処理のため）
-      game.undo();
+      game.undo(); // 共通処理のため一旦戻す
       doMove(source, target, isPromo ? promo : undefined);
 
-      // 人間の手が終わったら黒手番開始＝黒の転生→AI着手
+      // 人間手後 → 相手手番開始：相手の転生→AI着手
       setTimeout(()=> {
-        reincarnateIfAny('b');
-        updateStatus();
-        setTimeout(aiTurn, 140);
+        if (HUMAN==='w'){ // 相手は黒
+          reincarnateIfAny('b');
+          updateStatus();
+          setTimeout(aiTurn, 140);
+        } else {          // 相手は白（HUMANは黒）＝AIが先手
+          // 次の手番は白→ ここではAIではなく、白の手が終わっているので黒手番開始＝黒の転生
+          reincarnateIfAny('w'); // 念のため白側も処理（通常ここは不要）
+        }
       }, 120);
     }
+    function onSnapEnd () { board.position(game.fen()); }
 
-    function onSnapEnd () {
-      board.position(game.fen());
+    // ===== 新規開始 =====
+    function startNew(side){
+      HUMAN = side; queue = []; game = new Chess();
+      const orient = (HUMAN==='w') ? 'white' : 'black';
+      board.orientation(orient);
+      board.position('start', false);
+      logEl.innerHTML = ''; log('新規ゲーム開始。' + (HUMAN==='w'?'白':'黒') + 'でプレイ。');
+      renderQueue(); updateStatus();
+
+      // 先手がAIの場合（HUMAN=黒）→ 白の手番でAIが指す前に白の転生
+      if (HUMAN==='b'){
+        setTimeout(()=>{
+          reincarnateIfAny('w'); // 白の転生（置けなければ何も起きない）
+          updateStatus('（AI思考中…）');
+          setTimeout(()=>{
+            // 白＝AIで1手指す
+            const moves = game.moves({ verbose:true });
+            if (moves.length){
+              // シンプルに最良手を選ぶ（白側評価に合わせて符号反転）
+              let best=moves[0], bestScore=-Infinity;
+              for (const m of moves){
+                const clone = new Chess(game.fen()); const r=clone.move(m);
+                if (!r) continue;
+                let score = (aiMaterial('w') - aiMaterial('b')) - (r.captured?expectedEV(r.captured):0)*0.8;
+                if (clone.isCheckmate()) score = 1000;
+                if (clone.isStalemate()) score = 0;
+                if (score>bestScore){ bestScore=score; best=m; }
+              }
+              doMove(best.from, best.to, best.promotion);
+            }
+            // 黒（人間）手番開始 → 黒の転生
+            if (game.turn()==='b') { reincarnateIfAny('b'); }
+            updateStatus();
+          }, 180);
+        }, 120);
+      }
     }
 
-    // --- 初期化 ------------------------------------------------------------
-    function resetGame(){
-      game = new Chess();
-      queue = [];
-      board.position('start');
-      logEl.innerHTML = '';
-      log('新規ゲーム開始。白の手番。');
-      renderQueue();
-      updateStatus();
-    }
-
+    // ===== 初期化 =====
     function init(){
-      const size = Math.min(640, (typeof window!=='undefined' ? window.innerWidth : 640) - 48);
       board = Chessboard('board', {
         position: 'start',
         draggable: true,
         pieceTheme: 'https://cdnjs.cloudflare.com/ajax/libs/chessboard.js/1.0.0/img/chesspieces/wikipedia/{piece}.png',
-        onDragStart,
-        onDrop,
-        onSnapEnd
+        onDragStart, onDrop, onSnapEnd,
+        orientation: 'white'
       });
-      // 初期表示
-      renderQueue();
-      log('新規ゲーム開始。白の手番。');
-      updateStatus();
+      renderQueue(); log('新規ゲーム開始。白の手番。'); updateStatus();
+      // レスポンシブ
+      window.addEventListener('resize', () => board && board.resize());
     }
-
     window.addEventListener('load', init);
-    window.addEventListener('resize', () => board && board.resize());
   </script>
 </body>
 </html>
