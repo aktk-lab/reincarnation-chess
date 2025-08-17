@@ -273,7 +273,310 @@
             function renderBoard() {
                 const squares = boardEl.querySelectorAll('.square');
                 squares.forEach(square => {
-                    const row = square.dataset.row;
-                    const col = square.dataset.col;
+                    const row = parseInt(square.dataset.row);
+                    const col = parseInt(square.dataset.col);
                     square.innerHTML = '';
-                    square.classList.remove('selected', 'legal-
+                    square.classList.remove('selected', 'legal-move');
+                    const piece = board[row][col];
+                    if (piece) {
+                        const pieceEl = document.createElement('span');
+                        pieceEl.classList.add('piece', piece.color);
+                        pieceEl.textContent = pieceMap[piece.type][piece.color];
+                        pieceEl.dataset.row = row;
+                        pieceEl.dataset.col = col;
+                        square.appendChild(pieceEl);
+                    }
+                });
+
+                if (selectedPiece) {
+                    const selectedSquare = boardEl.querySelector(`.square[data-row="${selectedPiece.row}"][data-col="${selectedPiece.col}"]`);
+                    selectedSquare.classList.add('selected');
+                }
+            }
+
+            function renderCapturedPieces() {
+                whiteCapturedEl.innerHTML = '<h3>白の捕獲済み</h3>';
+                blackCapturedEl.innerHTML = '<h3>黒の捕獲済み</h3>';
+
+                capturedPieces.black.forEach((piece, index) => {
+                    const pieceEl = document.createElement('span');
+                    pieceEl.classList.add('captured-piece', 'white');
+                    pieceEl.textContent = pieceMap[piece.type].white;
+                    pieceEl.dataset.index = index;
+                    pieceEl.dataset.color = 'black';
+                    whiteCapturedEl.appendChild(pieceEl);
+                });
+
+                capturedPieces.white.forEach((piece, index) => {
+                    const pieceEl = document.createElement('span');
+                    pieceEl.classList.add('captured-piece', 'black');
+                    pieceEl.textContent = pieceMap[piece.type].black;
+                    pieceEl.dataset.index = index;
+                    pieceEl.dataset.color = 'white';
+                    blackCapturedEl.appendChild(pieceEl);
+                });
+            }
+
+            function getLegalMoves(piece, row, col) {
+                const moves = [];
+                const opponentColor = piece.color === 'white' ? 'black' : 'white';
+
+                const isBlocked = (r, c) => r < 0 || r > 7 || c < 0 || c > 7 || (board[r][c] && board[r][c].color === piece.color);
+                const canCapture = (r, c) => r >= 0 && r < 8 && c >= 0 && c < 8 && board[r][c] && board[r][c].color === opponentColor;
+
+                switch (piece.type) {
+                    case 'pawn':
+                        const direction = piece.color === 'white' ? -1 : 1;
+                        // 1マス前進
+                        if (!isBlocked(row + direction, col) && !board[row + direction][col]) {
+                            moves.push({ row: row + direction, col: col });
+                        }
+                        // 2マス前進 (初期位置のみ)
+                        if ((piece.color === 'white' && row === 6) || (piece.color === 'black' && row === 1)) {
+                            if (!board[row + direction][col] && !board[row + 2 * direction][col]) {
+                                moves.push({ row: row + 2 * direction, col: col });
+                            }
+                        }
+                        // 敵駒の斜め捕獲
+                        if (canCapture(row + direction, col - 1)) {
+                            moves.push({ row: row + direction, col: col - 1 });
+                        }
+                        if (canCapture(row + direction, col + 1)) {
+                            moves.push({ row: row + direction, col: col + 1 });
+                        }
+                        break;
+                    case 'rook':
+                        // 縦の動き
+                        for (let r = row + 1; r < 8; r++) { if (isBlocked(r, col)) break; moves.push({ row: r, col: col }); if (canCapture(r, col)) break; }
+                        for (let r = row - 1; r >= 0; r--) { if (isBlocked(r, col)) break; moves.push({ row: r, col: col }); if (canCapture(r, col)) break; }
+                        // 横の動き
+                        for (let c = col + 1; c < 8; c++) { if (isBlocked(row, c)) break; moves.push({ row: row, col: c }); if (canCapture(row, c)) break; }
+                        for (let c = col - 1; c >= 0; c--) { if (isBlocked(row, c)) break; moves.push({ row: row, col: c }); if (canCapture(row, c)) break; }
+                        break;
+                    case 'knight':
+                        const knightMoves = [[-2, -1], [-2, 1], [-1, -2], [-1, 2], [1, -2], [1, 2], [2, -1], [2, 1]];
+                        knightMoves.forEach(([dr, dc]) => {
+                            const newRow = row + dr;
+                            const newCol = col + dc;
+                            if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                                if (!isBlocked(newRow, newCol)) {
+                                    moves.push({ row: newRow, col: newCol });
+                                }
+                            }
+                        });
+                        break;
+                    case 'bishop':
+                        // 右下
+                        for (let i = 1; row + i < 8 && col + i < 8; i++) { if (isBlocked(row + i, col + i)) break; moves.push({ row: row + i, col: col + i }); if (canCapture(row + i, col + i)) break; }
+                        // 左下
+                        for (let i = 1; row + i < 8 && col - i >= 0; i++) { if (isBlocked(row + i, col - i)) break; moves.push({ row: row + i, col: col - i }); if (canCapture(row + i, col - i)) break; }
+                        // 右上
+                        for (let i = 1; row - i >= 0 && col + i < 8; i++) { if (isBlocked(row - i, col + i)) break; moves.push({ row: row - i, col: col + i }); if (canCapture(row - i, col + i)) break; }
+                        // 左上
+                        for (let i = 1; row - i >= 0 && col - i >= 0; i++) { if (isBlocked(row - i, col - i)) break; moves.push({ row: row - i, col: col - i }); if (canCapture(row - i, col - i)) break; }
+                        break;
+                    case 'queen':
+                        // Rook + Bishop の動きを結合
+                        const rookMoves = getLegalMoves({ type: 'rook', color: piece.color }, row, col);
+                        const bishopMoves = getLegalMoves({ type: 'bishop', color: piece.color }, row, col);
+                        moves.push(...rookMoves, ...bishopMoves);
+                        break;
+                    case 'king':
+                        const kingMoves = [[-1, -1], [-1, 0], [-1, 1], [0, -1], [0, 1], [1, -1], [1, 0], [1, 1]];
+                        kingMoves.forEach(([dr, dc]) => {
+                            const newRow = row + dr;
+                            const newCol = col + dc;
+                            if (newRow >= 0 && newRow < 8 && newCol >= 0 && newCol < 8) {
+                                if (!isBlocked(newRow, newCol)) {
+                                    moves.push({ row: newRow, col: newCol });
+                                }
+                            }
+                        });
+                        break;
+                }
+                return moves;
+            }
+
+            function isCheckmate(color) {
+                // TODO: 実際のチェスルールに従ったチェックメイト判定を実装
+                return false;
+            }
+
+            function switchTurn() {
+                currentTurn = currentTurn === 'white' ? 'black' : 'white';
+                currentTurnEl.textContent = `${currentTurn === 'white' ? '白' : '黒'}のターン`;
+            }
+
+            function handleMove(targetRow, targetCol) {
+                const fromRow = selectedPiece.row;
+                const fromCol = selectedPiece.col;
+                const pieceToMove = board[fromRow][fromCol];
+
+                // 駒の捕獲
+                const capturedPiece = board[targetRow][targetCol];
+                if (capturedPiece) {
+                    capturedPieces[currentTurn].push(capturedPiece);
+                    renderCapturedPieces();
+                }
+
+                // ポーンのプロモーション
+                if (pieceToMove.type === 'pawn' && ((currentTurn === 'white' && targetRow === 0) || (currentTurn === 'black' && targetRow === 7))) {
+                    pieceToMove.type = 'queen'; // 簡単にクイーンにプロモーション
+                }
+
+                board[targetRow][targetCol] = pieceToMove;
+                board[fromRow][fromCol] = null;
+                selectedPiece = null;
+                renderBoard();
+
+                if (isCheckmate(currentTurn === 'white' ? 'black' : 'white')) {
+                    messageEl.textContent = `${currentTurn === 'white' ? '白' : '黒'}の勝利！`;
+                    boardEl.removeEventListener('click', handleBoardClick);
+                } else {
+                    switchTurn();
+                }
+            }
+            
+            function enterResurrectionMode(event) {
+                event.stopPropagation();
+                if (capturedPieces[currentTurn].length === 0) {
+                    messageEl.textContent = "転生させる駒がありません。";
+                    return;
+                }
+                isResurrectionMode = true;
+                messageEl.textContent = "転生させたい駒を選択し、配置場所をクリックしてください。";
+                resurrectButton.style.display = 'none';
+                
+                // 捕獲された駒の選択を可能にする
+                const capturedPiecesContainer = document.querySelector(`.${currentTurn === 'white' ? 'white' : 'black'}-captured`);
+                capturedPiecesContainer.querySelectorAll('.captured-piece').forEach(el => {
+                    el.style.cursor = 'pointer';
+                    el.addEventListener('click', handleCapturedPieceClick, { once: true });
+                });
+            }
+
+            function handleCapturedPieceClick(event) {
+                if (!isResurrectionMode) return;
+                
+                if (selectedCapturedPiece) {
+                    selectedCapturedPiece.style.outline = 'none';
+                }
+
+                selectedCapturedPiece = event.target;
+                selectedCapturedPiece.style.outline = '2px solid green';
+                messageEl.textContent = "配置場所をクリックしてください。";
+            }
+            
+            function handleResurrection(targetRow, targetCol) {
+                const capturedIndex = selectedCapturedPiece.dataset.index;
+                const pieceToResurrect = capturedPieces[currentTurn].splice(capturedIndex, 1)[0];
+                
+                // 転生後の駒タイプをユーザーに選ばせる
+                showResurrectionDialog(pieceToResurrect.color, targetRow, targetCol);
+            }
+
+            function showResurrectionDialog(color, row, col) {
+                resurrectionDialog.dataset.row = row;
+                resurrectionDialog.dataset.col = col;
+                resurrectionDialog.style.display = 'block';
+                overlay.style.display = 'block';
+                
+                const options = resurrectionDialog.querySelectorAll('.resurrection-option');
+                options.forEach(option => {
+                    option.textContent = pieceMap[option.dataset.pieceType][color];
+                    option.onclick = () => {
+                        finalizeResurrection(color, row, col, option.dataset.pieceType);
+                    };
+                });
+            }
+
+            function finalizeResurrection(color, row, col, type) {
+                board[row][col] = { type: type, color: color };
+                
+                selectedCapturedPiece.style.outline = 'none';
+                selectedCapturedPiece = null;
+                isResurrectionMode = false;
+                renderBoard();
+                renderCapturedPieces();
+                switchTurn();
+                messageEl.textContent = "";
+                resurrectButton.style.display = 'block';
+                resurrectionDialog.style.display = 'none';
+                overlay.style.display = 'none';
+            }
+
+            function handleBoardClick(event) {
+                if (isResurrectionMode) {
+                    const targetSquare = event.target.closest('.square');
+                    if (!targetSquare) return;
+                    
+                    const targetRow = parseInt(targetSquare.dataset.row);
+                    const targetCol = parseInt(targetSquare.dataset.col);
+
+                    if (board[targetRow][targetCol] === null) {
+                        if (selectedCapturedPiece) {
+                            handleResurrection(targetRow, targetCol);
+                        } else {
+                            messageEl.textContent = "転生させたい駒を選んでください。";
+                        }
+                    } else {
+                        messageEl.textContent = "その場所には駒があります。別の場所を選んでください。";
+                    }
+                    return;
+                }
+
+                const clickedSquare = event.target.closest('.square');
+                if (!clickedSquare) return;
+
+                const row = parseInt(clickedSquare.dataset.row);
+                const col = parseInt(clickedSquare.dataset.col);
+
+                if (selectedPiece) {
+                    // 駒の移動
+                    const legalMoves = getLegalMoves(board[selectedPiece.row][selectedPiece.col], selectedPiece.row, selectedPiece.col);
+                    const isLegalMove = legalMoves.some(move => move.row === row && move.col === col);
+                    if (isLegalMove) {
+                        handleMove(row, col);
+                    } else {
+                        messageEl.textContent = "その場所には動かせません。";
+                        selectedPiece = null;
+                        renderBoard();
+                    }
+                } else {
+                    // 駒の選択
+                    const piece = board[row][col];
+                    if (piece && piece.color === currentTurn) {
+                        selectedPiece = { row, col };
+                        messageEl.textContent = `${piece.type}を選択しました。`;
+                        renderBoard();
+                        const legalMoves = getLegalMoves(piece, row, col);
+                        legalMoves.forEach(move => {
+                            const square = boardEl.querySelector(`.square[data-row="${move.row}"][data-col="${move.col}"]`);
+                            if (square) {
+                                square.classList.add('legal-move');
+                            }
+                        });
+                    } else if (piece) {
+                        messageEl.textContent = "相手の駒です。";
+                    } else {
+                        messageEl.textContent = "駒がありません。";
+                    }
+                }
+            }
+            
+            resurrectButton.addEventListener('click', enterResurrectionMode);
+            boardEl.addEventListener('click', handleBoardClick);
+
+            function init() {
+                createBoard();
+                setupPieces();
+                renderBoard();
+                renderCapturedPieces();
+                messageEl.textContent = 'ゲーム開始！';
+            }
+
+            init();
+        });
+    </script>
+</body>
+</html>
