@@ -179,7 +179,7 @@ button:disabled{ opacity:.5; cursor:not-allowed; }
 .small{ font-size: 12px; color:#666; }
 
 /* modal */
-#overlay{
+#overlay { display:none !important; }
   display:none;
   position:fixed;
   inset:0;
