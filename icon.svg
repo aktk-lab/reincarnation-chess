@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512">
+  <rect width="512" height="512" rx="96" fill="#e53935"/>
+  <text x="50%" y="52%" text-anchor="middle" dominant-baseline="middle"
+        font-size="210" font-family="system-ui, -apple-system, Segoe UI, Roboto">
+    ♕
+  </text>
+</svg>
