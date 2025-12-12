@@ -1,0 +1,15 @@
+{
+  "name": "転生チェス",
+  "short_name": "転生チェス",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f6f6f6",
+  "theme_color": "#e53935",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
