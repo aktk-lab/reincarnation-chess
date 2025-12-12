@@ -674,6 +674,28 @@
             selectBlackBtn.addEventListener('click', () => startGame('black'));
             resurrectButton.addEventListener('click', enterResurrectionMode);
             resetButton.addEventListener('click', resetGame);
+            function resetGame() {
+  selectedPiece = null;
+  currentTurn = 'white';
+  capturedPieces.white = [];
+  capturedPieces.black = [];
+  isResurrectionMode = false;
+  selectedCapturedPiece = null;
+  playerColor = null;
+
+  // ★追加：UIの状態を必ず初期化
+  resurrectButton.style.display = 'block';
+  resurrectionDialog.style.display = 'none';
+  overlay.style.display = 'none';
+
+  gameContainer.style.display = 'none';
+  setupContainer.style.display = 'flex';
+  messageEl.textContent = '';
+  currentTurnEl.textContent = '';
+  renderCapturedPieces();
+  boardEl.removeEventListener('click', handleBoardClick);
+  boardEl.addEventListener('click', handleBoardClick);
+}
             boardEl.addEventListener('click', handleBoardClick);
 
             function startGame(color) {
