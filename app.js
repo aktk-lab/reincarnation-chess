@@ -106,10 +106,11 @@
           [...el.querySelectorAll('.capPiece')].forEach(n => n.classList.remove('selected'));
           sp.classList.add('selected');
 
-          // ★重要：ここでダイアログを閉じる → overlayが盤面を塞がない
-          closeDialog();
+          // ★重要：盤面タップを邪魔しないようにする
+          closeDialog();                       // overlay/dialog を閉じる
+          overlay.style.pointerEvents = 'none'; // 念のため
 
-          messageEl.textContent = '置きたいマスを選んでください。';
+          messageEl.textContent = '置きたいマス（空きマス）を選んでください。';
         });
 
         el.appendChild(sp);
@@ -238,6 +239,7 @@
     dialogText.textContent = text;
     overlay.style.display = 'block';
     dialog.style.display = 'block';
+    overlay.style.pointerEvents = 'auto'; // ★戻す
   }
   function closeDialog() {
     overlay.style.display = 'none';
@@ -258,7 +260,7 @@
     updateResurrectButtonState();
 
     messageEl.textContent = '転生させたい駒を選んでください。';
-    openDialog('捕獲済み（自分が取られた）駒をタップ → 次に盤面の空きマスをタップ。転生先はランダム（♕♖♗♘）です。');
+    openDialog('捕獲済み（自分が取られた）駒をタップ → 次に盤面の空きマスをタップ。転生先はランダム（♔♕♖♗♘）です。');
   }
 
   function cancelResurrection() {
@@ -266,33 +268,46 @@
     selectedCapturedPiece = null;
     messageEl.textContent = '';
     closeDialog();
+    overlay.style.pointerEvents = 'auto';
     renderCapturedPieces();
     updateResurrectButtonState();
   }
 
-  // ★クイーン低確率：重み付き（例：Q 10%, R/B/N 各30%）
+  // ★キング低確率 + クイーン低確率
+  // 例：King 2% / Queen 6% / Rook・Bishop・Knight 合計92%で均等
   function getRandomResurrectionType() {
-    const bag = [
-      'queen',                     // 1
-      'rook','rook','rook',        // 3
-      'bishop','bishop','bishop',  // 3
-      'knight','knight','knight'   // 3
-    ];
-    return bag[Math.floor(Math.random() * bag.length)];
+    const r = Math.random();
+    if (r < 0.02) return 'king';   // 2%
+    if (r < 0.08) return 'queen';  // 次の6%（合計8%）
+
+    const t = (r - 0.08) / 0.92;   // 0..1
+    if (t < 1/3) return 'rook';
+    if (t < 2/3) return 'bishop';
+    return 'knight';
   }
 
   function handleResurrectionPlacement(toIdx) {
     if (!isResurrectionMode) return;
-    if (!selectedCapturedPiece) return;
-    if (pieceAt(toIdx)) return; // 空きマスのみ
+
+    if (!selectedCapturedPiece) {
+      messageEl.textContent = '先に転生させたい駒（捕獲済み）を選んでください。';
+      return;
+    }
+
+    if (pieceAt(toIdx)) {
+      messageEl.textContent = 'そこは空きマスではありません。空いているマスを選んでください。';
+      return;
+    }
 
     const newType = getRandomResurrectionType();
     board[toIdx] = { type: newType, color: playerColor };
 
+    // 捕獲リストから1個消費
     const list = capturedPieces[playerColor];
     const k = list.indexOf(selectedCapturedPiece);
     if (k !== -1) list.splice(k, 1);
 
+    // 状態リセット
     isResurrectionMode = false;
     selectedCapturedPiece = null;
     messageEl.textContent = '';
@@ -320,7 +335,6 @@
     const moves = getAllLegalMovesForColor(color);
     if (moves.length === 0) return null;
 
-    // ざっくりAI：捕獲があれば捕獲優先、なければランダム
     const caps = moves.filter(m => m.isCapture);
     const pool = caps.length ? caps : moves;
     return pool[Math.floor(Math.random() * pool.length)];
@@ -329,9 +343,8 @@
   function maybeAIMove() {
     if (!playerColor) return;
     if (currentTurn !== aiColor) return;
-    if (isResurrectionMode) return; // 人間が転生中なら待つ
+    if (isResurrectionMode) return;
 
-    // 少し間を置いてAIが指す
     setTimeout(() => {
       if (currentTurn !== aiColor) return;
       if (isResurrectionMode) return;
@@ -356,12 +369,18 @@
     // AIの番は無効
     if (playerColor && currentTurn === aiColor) return;
 
-    // ★最優先：転生モード＆捕獲駒選択済みなら「置く」
+    // 転生最優先
     if (isResurrectionMode && selectedCapturedPiece) {
       handleResurrectionPlacement(idx);
       return;
     }
-    if (isResurrectionMode) return;
+    if (isResurrectionMode) {
+      // 捕獲駒未選択なら盤面無視（ただしメッセージは出しても良い）
+      if (!selectedCapturedPiece) {
+        messageEl.textContent = '先に転生させたい駒（捕獲済み）を選んでください。';
+      }
+      return;
+    }
 
     const p = pieceAt(idx);
 
@@ -382,7 +401,7 @@
       return;
     }
     if (p.color !== currentTurn) return;
-    if (p.color !== playerColor) return; // 人間は自分の色だけ触れる
+    if (p.color !== playerColor) return;
 
     selected = idx;
     const {moves, captures} = getLegalMoves(idx);
@@ -411,6 +430,9 @@
     messageEl.textContent = '';
     closeDialog();
 
+    // overlayを通常状態に
+    overlay.style.pointerEvents = 'auto';
+
     setupContainer.style.display = 'none';
     gameContainer.style.display = 'block';
 
@@ -437,6 +459,8 @@
     messageEl.textContent = '';
     turnEl.textContent = '';
     closeDialog();
+
+    overlay.style.pointerEvents = 'auto';
 
     gameContainer.style.display = 'none';
     setupContainer.style.display = 'flex';
