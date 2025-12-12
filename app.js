@@ -13,7 +13,7 @@
   const resetBtn       = document.getElementById('resetBtn');
   const resurrectBtn   = document.getElementById('resurrectBtn');
 
-  const overlay        = document.getElementById('overlay');
+  // ダイアログ（overlayは使わない）
   const dialog         = document.getElementById('dialog');
   const dialogText     = document.getElementById('dialogText');
   const cancelResBtn   = document.getElementById('cancelRes');
@@ -102,14 +102,12 @@
           if (color !== playerColor) return;
 
           selectedCapturedPiece = p;
-
-          [...el.querySelectorAll('.capPiece')].forEach(n => n.classList.remove('selected'));
+          [...capWhiteEl.querySelectorAll('.capPiece')].forEach(n => n.classList.remove('selected'));
+          [...capBlackEl.querySelectorAll('.capPiece')].forEach(n => n.classList.remove('selected'));
           sp.classList.add('selected');
 
-          // ★重要：盤面タップを邪魔しないようにする
-          closeDialog();                       // overlay/dialog を閉じる
-          overlay.style.pointerEvents = 'none'; // 念のため
-
+          // ★盤面が絶対触れるように：ここでダイアログを閉じる（overlayはそもそも使わない）
+          closeDialog();
           messageEl.textContent = '置きたいマス（空きマス）を選んでください。';
         });
 
@@ -234,15 +232,12 @@
     maybeAIMove();
   }
 
-  // ---------- Modal ----------
+  // ---------- Dialog (no overlay) ----------
   function openDialog(text) {
     dialogText.textContent = text;
-    overlay.style.display = 'block';
     dialog.style.display = 'block';
-    overlay.style.pointerEvents = 'auto'; // ★戻す
   }
   function closeDialog() {
-    overlay.style.display = 'none';
     dialog.style.display = 'none';
   }
 
@@ -268,19 +263,16 @@
     selectedCapturedPiece = null;
     messageEl.textContent = '';
     closeDialog();
-    overlay.style.pointerEvents = 'auto';
     renderCapturedPieces();
     updateResurrectButtonState();
   }
 
-  // ★キング低確率 + クイーン低確率
-  // 例：King 2% / Queen 6% / Rook・Bishop・Knight 合計92%で均等
+  // King 2% / Queen 6% / 残り92%をR/B/Nで均等
   function getRandomResurrectionType() {
     const r = Math.random();
-    if (r < 0.02) return 'king';   // 2%
-    if (r < 0.08) return 'queen';  // 次の6%（合計8%）
-
-    const t = (r - 0.08) / 0.92;   // 0..1
+    if (r < 0.02) return 'king';
+    if (r < 0.08) return 'queen';
+    const t = (r - 0.08) / 0.92;
     if (t < 1/3) return 'rook';
     if (t < 2/3) return 'bishop';
     return 'knight';
@@ -293,7 +285,6 @@
       messageEl.textContent = '先に転生させたい駒（捕獲済み）を選んでください。';
       return;
     }
-
     if (pieceAt(toIdx)) {
       messageEl.textContent = 'そこは空きマスではありません。空いているマスを選んでください。';
       return;
@@ -302,12 +293,10 @@
     const newType = getRandomResurrectionType();
     board[toIdx] = { type: newType, color: playerColor };
 
-    // 捕獲リストから1個消費
     const list = capturedPieces[playerColor];
     const k = list.indexOf(selectedCapturedPiece);
     if (k !== -1) list.splice(k, 1);
 
-    // 状態リセット
     isResurrectionMode = false;
     selectedCapturedPiece = null;
     messageEl.textContent = '';
@@ -334,7 +323,6 @@
   function aiPickMove(color) {
     const moves = getAllLegalMovesForColor(color);
     if (moves.length === 0) return null;
-
     const caps = moves.filter(m => m.isCapture);
     const pool = caps.length ? caps : moves;
     return pool[Math.floor(Math.random() * pool.length)];
@@ -370,15 +358,8 @@
     if (playerColor && currentTurn === aiColor) return;
 
     // 転生最優先
-    if (isResurrectionMode && selectedCapturedPiece) {
-      handleResurrectionPlacement(idx);
-      return;
-    }
     if (isResurrectionMode) {
-      // 捕獲駒未選択なら盤面無視（ただしメッセージは出しても良い）
-      if (!selectedCapturedPiece) {
-        messageEl.textContent = '先に転生させたい駒（捕獲済み）を選んでください。';
-      }
+      handleResurrectionPlacement(idx);
       return;
     }
 
@@ -430,16 +411,12 @@
     messageEl.textContent = '';
     closeDialog();
 
-    // overlayを通常状態に
-    overlay.style.pointerEvents = 'auto';
-
     setupContainer.style.display = 'none';
     gameContainer.style.display = 'block';
 
     resurrectBtn.style.display = 'inline-block';
     updateResurrectButtonState();
 
-    // 先手がAIなら即打つ
     maybeAIMove();
   }
 
@@ -460,8 +437,6 @@
     turnEl.textContent = '';
     closeDialog();
 
-    overlay.style.pointerEvents = 'auto';
-
     gameContainer.style.display = 'none';
     setupContainer.style.display = 'flex';
 
@@ -477,7 +452,6 @@
   resetBtn.addEventListener('click', resetGame);
   resurrectBtn.addEventListener('click', enterResurrectionMode);
   cancelResBtn.addEventListener('click', cancelResurrection);
-  overlay.addEventListener('click', cancelResurrection);
 
   resetGame();
 })();
