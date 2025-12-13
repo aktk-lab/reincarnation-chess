@@ -15,6 +15,16 @@
 
   // （dialog/overlayは一切使わない。DOMに残ってても無視）
 
+  // --- 盤面タップを邪魔するレイヤーを強制で無効化（CSS不要） ---
+const __overlay = document.getElementById('overlay');
+if (__overlay) {
+  __overlay.style.display = 'none';
+  __overlay.style.pointerEvents = 'none';
+}
+const __dialog = document.getElementById('dialog');
+if (__dialog) {
+  __dialog.style.display = 'none';
+}
   // ---------- Game State ----------
   let playerColor = null; // 'white' | 'black'
   let aiColor = null;     // opposite
