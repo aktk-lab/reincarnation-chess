@@ -13,14 +13,11 @@
   const resetBtn       = document.getElementById('resetBtn');
   const resurrectBtn   = document.getElementById('resurrectBtn');
 
-  // ダイアログ（overlayは使わない）
-  const dialog         = document.getElementById('dialog');
-  const dialogText     = document.getElementById('dialogText');
-  const cancelResBtn   = document.getElementById('cancelRes');
+  // （dialog/overlayは一切使わない。DOMに残ってても無視）
 
   // ---------- Game State ----------
   let playerColor = null; // 'white' | 'black'
-  let aiColor = null;     // opposite of playerColor
+  let aiColor = null;     // opposite
   let currentTurn = 'white';
   let board = Array(64).fill(null);
 
@@ -43,7 +40,7 @@
   function inBounds(r,c){ return r>=0 && r<8 && c>=0 && c<8; }
   function idxToRC(i){ return { r: Math.floor(i/8), c: i%8 }; }
   function rcToIdx(r,c){ return r*8 + c; }
-  function opposite(color){ return color==='white' ? 'black' : 'white'; }
+  function opposite(color){ return color === 'white' ? 'black' : 'white'; }
 
   // ---------- PWA SW ----------
   if ('serviceWorker' in navigator) {
@@ -59,9 +56,9 @@
 
     set(0,0,'rook','black'); set(0,1,'knight','black'); set(0,2,'bishop','black'); set(0,3,'queen','black');
     set(0,4,'king','black'); set(0,5,'bishop','black'); set(0,6,'knight','black'); set(0,7,'rook','black');
-    for(let c=0;c<8;c++) set(1,c,'pawn','black');
+    for (let c=0;c<8;c++) set(1,c,'pawn','black');
 
-    for(let c=0;c<8;c++) set(6,c,'pawn','white');
+    for (let c=0;c<8;c++) set(6,c,'pawn','white');
     set(7,0,'rook','white'); set(7,1,'knight','white'); set(7,2,'bishop','white'); set(7,3,'queen','white');
     set(7,4,'king','white'); set(7,5,'bishop','white'); set(7,6,'knight','white'); set(7,7,'rook','white');
   }
@@ -96,20 +93,21 @@
         sp.className = 'capPiece';
         sp.textContent = PIECE_UNI[p.color][p.type];
 
-        sp.addEventListener('click', () => {
+        sp.addEventListener('pointerup', (ev) => {
+          ev.preventDefault();
+
           if (!isResurrectionMode) return;
           if (currentTurn !== playerColor) return;
           if (color !== playerColor) return;
 
           selectedCapturedPiece = p;
+
           [...capWhiteEl.querySelectorAll('.capPiece')].forEach(n => n.classList.remove('selected'));
           [...capBlackEl.querySelectorAll('.capPiece')].forEach(n => n.classList.remove('selected'));
           sp.classList.add('selected');
 
-          // ★盤面が絶対触れるように：ここでダイアログを閉じる（overlayはそもそも使わない）
-          closeDialog();
-          messageEl.textContent = '置きたいマス（空きマス）を選んでください。';
-        });
+          messageEl.textContent = '置きたいマス（空きマス）をタップしてください。';
+        }, { passive: false });
 
         el.appendChild(sp);
       });
@@ -143,6 +141,7 @@
   function getLegalMoves(fromIdx) {
     const p = pieceAt(fromIdx);
     if (!p) return {moves:new Set(), captures:new Set()};
+
     const {r,c} = idxToRC(fromIdx);
     const moves = new Set();
     const captures = new Set();
@@ -200,6 +199,8 @@
     if (p.type === 'rook' || p.type === 'queen') {
       addRay(-1,0); addRay(1,0); addRay(0,-1); addRay(0,1);
     }
+
+    // ★キングが複数でも“通常キングと同じ”に動く（特別扱いなし）
     if (p.type === 'king') {
       for (let dr=-1; dr<=1; dr++){
         for (let dc=-1; dc<=1; dc++){
@@ -232,15 +233,6 @@
     maybeAIMove();
   }
 
-  // ---------- Dialog (no overlay) ----------
-  function openDialog(text) {
-    dialogText.textContent = text;
-    dialog.style.display = 'block';
-  }
-  function closeDialog() {
-    dialog.style.display = 'none';
-  }
-
   // ---------- Resurrection ----------
   function enterResurrectionMode() {
     if (!playerColor) return;
@@ -254,15 +246,13 @@
     renderCapturedPieces();
     updateResurrectButtonState();
 
-    messageEl.textContent = '転生させたい駒を選んでください。';
-    openDialog('捕獲済み（自分が取られた）駒をタップ → 次に盤面の空きマスをタップ。転生先はランダム（♔♕♖♗♘）です。');
+    messageEl.textContent = '転生させたい駒（捕獲済み）をタップしてください。';
   }
 
   function cancelResurrection() {
     isResurrectionMode = false;
     selectedCapturedPiece = null;
     messageEl.textContent = '';
-    closeDialog();
     renderCapturedPieces();
     updateResurrectButtonState();
   }
@@ -282,21 +272,23 @@
     if (!isResurrectionMode) return;
 
     if (!selectedCapturedPiece) {
-      messageEl.textContent = '先に転生させたい駒（捕獲済み）を選んでください。';
+      messageEl.textContent = '先に転生させたい駒（捕獲済み）をタップしてください。';
       return;
     }
     if (pieceAt(toIdx)) {
-      messageEl.textContent = 'そこは空きマスではありません。空いているマスを選んでください。';
+      messageEl.textContent = 'そこは空きマスではありません。空いているマスをタップしてください。';
       return;
     }
 
     const newType = getRandomResurrectionType();
     board[toIdx] = { type: newType, color: playerColor };
 
+    // 捕獲リストから1個消費
     const list = capturedPieces[playerColor];
     const k = list.indexOf(selectedCapturedPiece);
     if (k !== -1) list.splice(k, 1);
 
+    // 状態リセット
     isResurrectionMode = false;
     selectedCapturedPiece = null;
     messageEl.textContent = '';
@@ -348,11 +340,19 @@
     }, 250);
   }
 
-  // ---------- Input ----------
-  function onBoardClick(e) {
-    const sq = e.target.closest('.sq');
+  // ---------- Input (board) ----------
+  // スマホで click が不安定なことがあるので pointerup を主に使う
+  function onBoardPointerUp(ev) {
+    ev.preventDefault();
+
+    const sq = ev.target.closest('.sq');
     if (!sq) return;
+
     const idx = Number(sq.dataset.index);
+    if (!Number.isFinite(idx)) {
+      messageEl.textContent = '内部エラー: マス番号が取得できませんでした。';
+      return;
+    }
 
     // AIの番は無効
     if (playerColor && currentTurn === aiColor) return;
@@ -388,7 +388,6 @@
     const {moves, captures} = getLegalMoves(idx);
     legalHints = moves;
     captureHints = captures;
-
     renderBoard();
   }
 
@@ -409,7 +408,6 @@
     renderCapturedPieces();
     updateTurnUI();
     messageEl.textContent = '';
-    closeDialog();
 
     setupContainer.style.display = 'none';
     gameContainer.style.display = 'block';
@@ -435,7 +433,6 @@
 
     messageEl.textContent = '';
     turnEl.textContent = '';
-    closeDialog();
 
     gameContainer.style.display = 'none';
     setupContainer.style.display = 'flex';
@@ -446,12 +443,24 @@
   }
 
   // ---------- Wire up ----------
-  boardEl.addEventListener('click', onBoardClick);
+  // 重要：pointerup を使う（clickだけだと環境によって取りこぼすことがある）
+  boardEl.addEventListener('pointerup', onBoardPointerUp, { passive: false });
+
+  // 念のため click でも同じ処理を呼ぶ（古いブラウザ/挙動差対策）
+  boardEl.addEventListener('click', (ev) => {
+    // pointerup が来ない環境用のフォールバック
+    onBoardPointerUp(ev);
+  });
+
   startWhiteBtn.addEventListener('click', () => startGame('white'));
   startBlackBtn.addEventListener('click', () => startGame('black'));
   resetBtn.addEventListener('click', resetGame);
   resurrectBtn.addEventListener('click', enterResurrectionMode);
-  cancelResBtn.addEventListener('click', cancelResurrection);
+
+  // キャンセル操作を残すなら、長押し等に割り当ててもOK。ここでは“転生ボタン長押し”代わりに右クリック等は省略。
+  // ひとまずUI上キャンセルしたいなら、リセットか、転生ボタンをもう一度押す運用でもOK。
+  // ただし「キャンセルボタン」がHTMLにあるなら生かす：
+  if (cancelResBtn) cancelResBtn.addEventListener('click', cancelResurrection);
 
   resetGame();
 })();
