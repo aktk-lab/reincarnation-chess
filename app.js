@@ -454,6 +454,7 @@ if (__dialog) {
 
   // ---------- Wire up ----------
   // 重要：pointerup を使う（clickだけだと環境によって取りこぼすことがある）
+  messageEl.textContent = '盤面タップ検知: ' + new Date().toLocaleTimeString();
   boardEl.addEventListener('pointerup', onBoardPointerUp, { passive: false });
 
   // 念のため click でも同じ処理を呼ぶ（古いブラウザ/挙動差対策）
